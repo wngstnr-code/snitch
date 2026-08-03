@@ -350,8 +350,21 @@ Sinkronisasi nyata (`npm run sanctions:sync`):
 - `rawHash` = sha256 **berkas daftar** yang dipakai memutuskan, bukan hash hasil pencarian
 - Tanggal terbit tidak pernah ditebak: EU dari `fileGenerationDate`, OFAC dari path publikasi tempat redirect bermuara. Tidak terbaca → melempar
 
-**B4 — Evidence bundler** — `lib/evidence/bundle.ts`
-Rakit bundle, hitung sha256, unggah ke Vercel Blob. **`evidenceAsOf` adalah parameter, bukan `now()`** (R4).
+**B4 — Evidence bundler** ✅ **SELESAI 2026-08-03** — `lib/evidence/bundle.ts`, 5 test hijau
+
+`evidenceAsOf` diperlakukan sebagai **batas bukti**, bukan label. Alert yang lebih baru dari batas dibuang dari bundle — bukan disembunyikan, tapi karena memang belum diketahui saat itu.
+
+**Angka siap-demo (R4), terukur pada petak Sarawak, batas 2026-06-01:**
+
+| | |
+|---|---|
+| Alert masuk bundle | **3.473** |
+| Total alert hari ini | 3.577 |
+| **Selisih = amunisi revocation** | **104 alert nyata** |
+
+Test ujung-ke-ujung tidak berhenti di "berhasil unggah": ia **mengunduh ulang bundle dari Blob dan menghitung ulang sha256-nya**, persis seperti verifikator pihak ketiga terhadap hash yang di-anchor onchain.
+
+Lainnya: `bundleHash` tak bergantung urutan item tapi bergantung `evidenceAsOf` · `blobUrl` di luar hash · `evidenceId` ganda ditolak (R5) · `euOperator` opsional, dan ketiadaannya berarti "belum terverifikasi", bukan "lolos".
 
 **B5 — Contradiction agent** — `lib/agent/assess.ts`
 `generateObject` + zod, `temperature: 0`. Agen hanya menerima bundle; **tidak boleh memanggil API eksternal**.
