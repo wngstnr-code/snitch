@@ -1,0 +1,26 @@
+# deps
+node_modules
+.pnp
+.pnp.js
+
+# next
+.next
+out
+build
+next-env.d.ts
+
+# env — JANGAN PERNAH di-commit (CLAUDE.md §9)
+.env
+.env.local
+.env*.local
+
+# vercel
+.vercel
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+yarn-error.log*
+coverage
+*.tsbuildinfo
