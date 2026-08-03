@@ -321,8 +321,19 @@ Dua temuan baru saat port:
 
 **Sisa pekerjaan:** integrasi ke job runner (B6) dan pemakaian di bundler (B4).
 
-**B2 — Konektor GLEIF** — `lib/evidence/gleif.ts`
-Validasi zod, tandai `matchQuality`. **DoD:** query "Sime Darby" mengembalikan entitas nyata.
+**B2 — Konektor GLEIF** ✅ **SELESAI 2026-08-03** — `lib/evidence/gleif.ts` + 7 test hijau
+
+⚠️ **DoD lama diganti karena salah arah.** Bunyinya dulu: *"query 'Sime Darby' mengembalikan entitas nyata"*. Itu justru mendorong bug yang paling berbahaya di modul ini — query itu memang mengembalikan entitas nyata, tapi entitas **Hong Kong, Australia, dan Selandia Baru**. Lulus DoD sambil salah total.
+
+**DoD baru (semuanya sudah lulus):**
+- `jurisdiction` ISO alpha-2 **wajib**, divalidasi sebelum request, dan hasilnya difilter ulang di sisi kita
+- "Sime Darby" @ MY → `matchQuality: 'none'`, `lei: null` — bukan entitas HK
+- "FELDA" @ MY → `none`, tidak pernah menjadi Felda AG (Swiss)
+- Operator EU nyata (Unilever N.V. @ NL) → `exact`, LEI `549300TK7G7NZTVM1Z30`
+- `entityStatus` dan `registrationStatus` dilaporkan terpisah
+- `filter[fulltext]` tidak dipakai sama sekali
+
+**Temuan yang berguna untuk B5:** UNILEVER N.V. ber-`entityStatus: ACTIVE` tapi `registrationStatus: LAPSED`. Kontradiksi semacam ini persis yang harus ditangkap agen — dan hanya terlihat kalau dua status itu tidak disatukan.
 
 **B3 — Konektor sanksi** — `lib/evidence/sanctions.ts`
 Unduh OFAC SDN (wajib follow redirect) + EU list → simpan DB → normalisasi nama + fuzzy match. Simpan tanggal daftar.
