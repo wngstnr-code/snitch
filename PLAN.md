@@ -300,15 +300,11 @@ Host Blockscout diturunkan dari `CHAIN_ID` (`blockscoutApiUrl` di `lib/chain/con
 
 Urutan ini disengaja: **B1 lebih dulu**, karena ia risiko teknis terbesar. Kalau ia gagal, seluruh produk berubah — dan lebih baik tahu di jam ke-3 daripada di jam ke-30.
 
-**B1 — Dekode tile GFW → alert dalam polygon** ⚠️ **PROTOTIPE TIDAK ADA DI REPO — cek 2026-08-03**
+**B1 — Dekode tile GFW → alert dalam polygon** ✅ **SELESAI 2026-08-03** — `lib/evidence/gfw.ts` + `gfw.test.ts`, **13 test hijau** (`npm test`)
 
-`prototype/gfw.mjs`, `prototype/test-gfw.mjs`, dan `prototype/eas.mjs` **tidak ada di working tree maupun di git** (repo belum punya commit sama sekali saat ini). Jangan merencanakan B1 sebagai "tinggal port" sampai file itu benar-benar terlihat.
+Prototipe sudah di-commit ke `prototype/` dan diport ke TypeScript ketat. Semua test menyentuh GFW sungguhan — yang diuji adalah kemampuan membaca data nyata, bukan tiruannya.
 
-Dua kemungkinan, dan keduanya menuntut tindakan:
-- **Prototipe ada di mesin lain / belum di-commit** → commit ke `prototype/` **sekarang**, sebelum apa pun. Klaim R2/R13/R14 bersandar padanya.
-- **Prototipe tidak pernah ada di repo ini** → B1 ditulis dari nol di `lib/evidence/gfw.ts`. Ini **bukan** riset dari awal: seluruh spesifikasinya sudah terkunci di `CLAUDE.md` §3.1 (encoding `R*255+G`, confidence di channel alpha 4/8/24, zoom adaptif, konkurensi 40) lengkap dengan **tiga fixture regresi bernilai nyata** (Riau 293 px, Sarawak 4.889 px, Kalimantan 2.956 px). Tulis test terhadap fixture itu lebih dulu, baru implementasinya.
-
-Sub-fungsi yang harus ada (dan, bila prototipe ketemu, sudah teruji di sana):
+Terimplementasi dan teruji:
 - `pickZoom(ha)` — zoom adaptif (R11)
 - `tilesFor()`, `bbox()`, `areaHa()` — luas geodesik spherical-excess, akurasi 0,7% vs elipsoid
 - `decodePng()` — dekode + unfilter PNG murni `node:zlib`, nol dependensi
@@ -317,9 +313,13 @@ Sub-fungsi yang harus ada (dan, bila prototipe ketemu, sudah teruji di sana):
 - `collectAlerts()` — konkurensi 40, melempar bila tile gagal (R10)
 - Confidence dari channel alpha (R3)
 
-Angka acuan yang pernah tercatat (petak Sarawak 3.095 ha → zoom 14 → 16 tile → 3.577 alert dalam 2,9 s, 3.568 setelah cutoff EUDR) **belum bisa direproduksi di repo ini** karena kodenya tidak ada. Perlakukan sebagai target, bukan sebagai bukti — sampai `lib/evidence/gfw.ts` menghasilkannya lagi.
+**Tereproduksi dari repo**, bukan dari ingatan: petak Sarawak 3.095 ha → z14 → 16 tile → **3.577 alert**, 3.568 setelah cutoff EUDR, semuanya terverifikasi di dalam polygon. Tiga fixture tile `CLAUDE.md` §3.1 cocok persis (293 / 4.889 / 2.956 piksel, rentang tanggal sama), dengan versi dipin ke `v20260803`.
 
-**Sisa pekerjaan:** implementasi + test fixture, agregasi (R16), integrasi ke job runner.
+Dua temuan baru saat port:
+- **Tile di luar sabuk tropis GFW menjawab HTTP 500 secara konsisten** (terukur: `12/2000/1000`, tiga kali berturut-turut — bukan gangguan sesaat). `fetchTile` melempar setelah retry habis dan **tidak pernah** mengembalikan tile kosong. Ada test khusus untuk klaim ini (R10).
+- `rawHash` mencakup piksel mentah **plus** parameter query (versi, zoom, geometri) — tanpa itu dua verifikasi ber-zoom beda bisa berbagi hash yang sama.
+
+**Sisa pekerjaan:** integrasi ke job runner (B6) dan pemakaian di bundler (B4).
 
 **B2 — Konektor GLEIF** — `lib/evidence/gleif.ts`
 Validasi zod, tandai `matchQuality`. **DoD:** query "Sime Darby" mengembalikan entitas nyata.
@@ -425,13 +425,13 @@ Bangun melawan `lib/types.ts` sejak menit pertama. Panggil endpoint sungguhan; s
 ## Register risiko
 
 > **Status per 2026-08-03 (audit akhir Fase 0):** R1, R11, R13, R15, R18, R20, R21 tertutup dengan bukti yang **ada di repo ini**.
-> **R2 dan R14 dibuka lagi** — keduanya ditutup berdasarkan `prototype/`, dan direktori itu tidak ada di repo maupun di git. R3 tetap terpecahkan karena temuannya berupa spesifikasi (channel alpha), bukan kode.
+> R2 dan R14 sempat dibuka lagi saat audit (prototipe belum ter-commit), lalu **ditutup ulang dengan bukti yang bisa dijalankan** — `npm test`, 13 hijau.
 > Pelajaran yang mahal: **risiko hanya tertutup kalau buktinya bisa dijalankan ulang dari repo.**
 
 | ID | Risiko | Pemilik | Mitigasi |
 |---|---|---|---|
 | **R1** | ~~Pendanaan wallet mainnet lambat~~ **DIHILANGKAN 2026-08-03** | Dev B | **Default diubah ke Base Sepolia.** Faucet instan, risiko nol, EAS + indexer + revoke semuanya terverifikasi jalan di sana. Blocker ini tadinya kita ciptakan sendiri dengan memilih mainnet. Mainnet kini opsional: satu attestation showcase bila dana kebetulan siap |
-| **R2** | Presisi polygon dari raster tile — **DIBUKA LAGI 2026-08-03** | Dev B | Metodenya terbukti dan terdokumentasi penuh (`CLAUDE.md` §3.1), tapi **kodenya tidak ada di repo** (`prototype/` kosong). Status jujur: *terpecahkan di atas kertas, belum di repo*. Tutup dengan `lib/evidence/gfw.ts` + test terhadap tiga fixture tile nyata. Risiko teknis terbesar Fase 1 — kerjakan paling awal |
+| **R2** | ~~Presisi polygon dari raster tile~~ **TERTUTUP DI REPO 2026-08-03** | Dev B | `lib/evidence/gfw.ts` + 13 test hijau (`npm test`). Petak 3.095 ha → 16 tile → 3.577 alert, semuanya terverifikasi di dalam polygon; tiga fixture tile §3.1 cocok persis. Bukti bisa dijalankan ulang siapa pun dari repo |
 | **R3** | ~~Channel confidence gagal dikalibrasi~~ **TERPECAHKAN** | Dev B | Confidence ada di **channel ALPHA** {4=low, 8=high, 24=highest}, bukan channel B. Diverifikasi lewat prediksi terkonfirmasi (kohort `low` = termuda) |
 | **R4** | Demo revocation tak bisa menunggu alert asli | Berdua | `evidenceAsOf` lampau pada petak yang memang punya alert sesudahnya. Data 100% asli. **Rancang sebagai field sejak awal** |
 | **R5** | Halusinasi LLM | Dev B | `generateObject` + zod, temp 0, validasi `evidenceId` terhadap bundle |
@@ -443,7 +443,7 @@ Bangun melawan `lib/types.ts` sejak menit pertama. Panggil endpoint sungguhan; s
 | **R11** | ~~z14 untuk radius 50 km = 1.681 tile ≈ 6 menit~~ **TERPECAHKAN 2026-08-03** | Dev B | Zoom adaptif: z12 untuk AOI luas (121 tile, **4,0 s** @ konkurensi 40), z14 untuk petak (4–9 tile). Sudah masuk `CLAUDE.md` §3.1 |
 | **R12** | Dataset pabrik bergeometri **POINT, bukan polygon** | Dev B | Radius sourcing 50 km (metodologi standar WRI/GFW). Bedakan di UI: *mill sourcing risk* ≠ *plot-level verification* |
 | **R13** | ~~EAS SDK berbasis ethers v6 vs stack viem~~ **TERPECAHKAN — kini terbukti di repo** | Dev B | **Buang `eas-sdk`.** `lib/chain/eas.ts` (viem murni) sudah dipakai nyata oleh `chain:check`, `schema:register`, dan `chain:verify` terhadap Base Sepolia: `getSchema` terbaca, UID schema dihitung deterministik, ABI attest/revoke siap. Satu web3 lib saja |
-| **R14** | Bukti tidak reproducible bila memakai `latest` — **BELUM DITUTUP DI REPO** | Dev B | Solusinya jelas (resolve `latest` → versi bertanggal `v20260803`, sematkan ke `tileVersion` di setiap bukti; field-nya sudah ada di `lib/types.ts`), tapi implementasinya ikut hilang bersama `prototype/`. Tutup bersama R2 |
+| **R14** | ~~Bukti tidak reproducible bila memakai `latest`~~ **TERTUTUP DI REPO 2026-08-03** | Dev B | `resolveVersion()` menyematkan versi bertanggal ke `tileVersion` dan ke `sourceUrl`; test menolak `latest` secara eksplisit. Fixture test dipin ke `v20260803` — tetap valid walau GFW terbit harian |
 | **R15** | ~~Akun Vercel belum diverifikasi~~ **TERPECAHKAN** | Berdua | CLI terautentikasi (`wngstnr-code`). Provisioning Neon/Blob/AI Gateway tetap dilakukan di Fase 0.2, tapi bukan blocker |
 | **R16** | **Bundle bukti membengkak** — 3.577 alert = 377 KB untuk 3.095 ha; AOI radius 50 km ≈ **93 MB** | Dev B | **Agregasi wajib di B4.** Simpan ringkasan deterministik (hitungan per bulan × confidence) selalu; daftar alert penuh hanya bila ≤ 5.000; di atas itu simpan agregat + N alert terbaru/terparah. Hash mencakup apa yang disimpan **plus** parameter query (versi, zoom, hash polygon) agar tetap reproducible |
 | **R17** | **Cakupan GLEIF untuk eksportir MY nihil** (2.256 entitas MY, 0 "PLANTATION"); pencocokan naif menghasilkan false positive lintas yurisdiksi | Berdua | **Peran GLEIF diubah**: verifikasi **operator EU** (cakupan tinggi, dan secara hukum memang pihak yang wajib DDS). Sisi eksportir diganti **cross-check sertifikasi RSPO**. Lihat `CLAUDE.md` §3.2 & §3.4b |
