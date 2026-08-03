@@ -456,11 +456,17 @@ function canonicalGeometry(geom: Geometry): string {
 export function buildDeforestationEvidence(
   geom: Geometry,
   result: CollectResult,
+  /**
+   * Batas bukti (R4). Wajib ikut masuk hash: tile yang sama dipotong pada dua
+   * tanggal berbeda menghasilkan bukti berbeda, jadi hash-nya tidak boleh sama.
+   */
+  asOf?: string,
 ): DeforestationEvidence {
   const manifest = JSON.stringify({
     source: GFW_TILE_BASE,
     version: result.version,
     zoom: result.zoom,
+    asOf: asOf ?? null,
     geometry: canonicalGeometry(geom),
     tiles: result.tileHashes.map((t) => `${t.tile.z}/${t.tile.x}/${t.tile.y}:${t.sha256}`),
   });
