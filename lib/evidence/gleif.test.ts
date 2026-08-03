@@ -10,7 +10,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { lookupLegalEntity, nameSimilarity, normalizeName } from './gleif';
+import { lookupLegalEntity } from './gleif';
+import { nameSimilarity, normalizeName } from './names';
 
 test('normalizeName membuang bentuk hukum, bukan identitas nama', () => {
   assert.equal(normalizeName('Unilever N.V.'), 'UNILEVER');
