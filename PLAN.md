@@ -335,8 +335,20 @@ Dua temuan baru saat port:
 
 **Temuan yang berguna untuk B5:** UNILEVER N.V. ber-`entityStatus: ACTIVE` tapi `registrationStatus: LAPSED`. Kontradiksi semacam ini persis yang harus ditangkap agen — dan hanya terlihat kalau dua status itu tidak disatukan.
 
-**B3 — Konektor sanksi** — `lib/evidence/sanctions.ts`
-Unduh OFAC SDN (wajib follow redirect) + EU list → simpan DB → normalisasi nama + fuzzy match. Simpan tanggal daftar.
+**B3 — Konektor sanksi** ✅ **SELESAI 2026-08-03** — `lib/evidence/sanctions.ts` + `scripts/sync-sanctions.ts`, 9 test hijau
+
+Sinkronisasi nyata (`npm run sanctions:sync`):
+
+| Daftar | Entri | Terbit | Waktu |
+|---|---|---|---|
+| OFAC SDN | 19.181 | 2026-07-29 | 30 s |
+| EU Consolidated | 31.068 | 2026-07-31 | 36 s |
+
+- **Daftar belum tersinkron / lebih tua dari 30 hari → melempar**, bukan "nol match" (R10)
+- Ambang 0,6 — sengaja lebih longgar dari GLEIF (0,75): melewatkan pihak tersanksi = gagal kepatuhan; kelebihan kandidat cuma menambah kerja reviewer, dan review manusia memang bagian alurnya
+- **Satu bukti per daftar**, masing-masing dengan `sourceUrl` + `rawHash` sendiri → agen bisa menyitir daftar mana yang cocok tanpa ambiguitas, dan `lib/types.ts` tidak perlu diubah
+- `rawHash` = sha256 **berkas daftar** yang dipakai memutuskan, bukan hash hasil pencarian
+- Tanggal terbit tidak pernah ditebak: EU dari `fileGenerationDate`, OFAC dari path publikasi tempat redirect bermuara. Tidak terbaca → melempar
 
 **B4 — Evidence bundler** — `lib/evidence/bundle.ts`
 Rakit bundle, hitung sha256, unggah ke Vercel Blob. **`evidenceAsOf` adalah parameter, bukan `now()`** (R4).
