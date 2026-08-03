@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "wallet:new": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/new-wallet.ts",
     "schema:register": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/register-schema.ts",
     "db:generate": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/drizzle-kit generate",
