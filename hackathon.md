@@ -58,7 +58,7 @@ bisnis yang matang — bukan sekadar demo teknis.
 
 ## 5. Filter Kualitas Ide (dipakai saat menyaring kandidat — arsip)
 
-> Ide sudah dikunci: **LEASH** (lihat `LEASH.md`). Filter ini disimpan sebagai
+> Ide sudah dikunci: **SNITCH** (lihat `IDEA.md`). Filter ini disimpan sebagai
 > rujukan bila ada pivot atau bila juri mempertanyakan dasar pemilihan ide.
 
 Sebuah ide layak dipertimbangkan hanya jika lolos SEMUA filter ini:
