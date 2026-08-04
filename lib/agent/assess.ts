@@ -20,6 +20,7 @@
  */
 
 import { generateObject } from 'ai';
+import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 import type { AgentAssessment, EvidenceBundle, Plot } from '../types';
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompt';
@@ -54,7 +55,8 @@ export interface AssessResult {
   assessedAt: string;
 }
 
-const MODEL = 'anthropic/claude-sonnet-5';
+const MODEL = google('gemini-1.5-flash');
+const MODEL_NAME_FOR_LOGS = 'google/gemini-1.5-flash';
 const MODEL_TIMEOUT_MS = 120_000;
 
 // Mencerminkan `Finding` di lib/types.ts persis (severity/claim/contradiction/evidenceIds).
@@ -159,7 +161,7 @@ export async function assessBundle(bundle: EvidenceBundle, ctx: AssessContext): 
     validIds,
   );
 
-  return { assessment, retried, model: MODEL, assessedAt: new Date().toISOString() };
+  return { assessment, retried, model: MODEL_NAME_FOR_LOGS, assessedAt: new Date().toISOString() };
 }
 
 /**

@@ -23,6 +23,7 @@
     "db:check": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/check-db.ts"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.33",
     "@base-ui/react": "^1.6.0",
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.6.1",

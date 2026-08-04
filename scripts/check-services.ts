@@ -10,19 +10,20 @@
  */
 
 import { generateText } from 'ai';
+import { google } from '@ai-sdk/google';
 import { put, del } from '@vercel/blob';
 
 const failures: string[] = [];
 
 async function checkAiGateway() {
   const { text } = await generateText({
-    model: 'anthropic/claude-sonnet-5',
+    model: google('gemini-1.5-flash'),
     prompt: 'Reply with exactly this token and nothing else: SNITCH_GATEWAY_OK',
     temperature: 0,
   });
   const ok = text.trim() === 'SNITCH_GATEWAY_OK';
-  console.log(`  ${ok ? '✔' : '✘'} AI Gateway (anthropic/claude-sonnet-5): ${JSON.stringify(text.trim())}`);
-  if (!ok) failures.push('AI Gateway');
+  console.log(`  ${ok ? '✔' : '✘'} Google AI (gemini-1.5-flash): ${JSON.stringify(text.trim())}`);
+  if (!ok) failures.push('Google AI');
 }
 
 async function checkBlob() {
@@ -43,7 +44,7 @@ async function checkBlob() {
 
 async function main() {
   for (const [label, fn] of [
-    ['AI Gateway', checkAiGateway],
+    ['Google AI', checkAiGateway],
     ['Vercel Blob', checkBlob],
   ] as const) {
     try {
@@ -58,7 +59,7 @@ async function main() {
     console.error(`\nGAGAL: ${failures.join(', ')}`);
     process.exit(1);
   }
-  console.log('\n✔ AI Gateway & Blob hidup.');
+  console.log('\n✔ Google AI & Blob hidup.');
 }
 
 main();
