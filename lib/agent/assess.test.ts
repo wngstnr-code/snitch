@@ -14,7 +14,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assessBundle, validateCitations } from './assess';
+import { assessBundle, guardCitations, validateCitations } from './assess';
 import { collectEvidence, prepareBundle } from '../evidence/bundle';
 import { areaHa, type Geometry } from '../evidence/gfw';
 import type { AgentAssessment, Evidence, EvidenceBundle, Plot } from '../types';
@@ -159,4 +159,94 @@ test('assessBundle menolak bundle kosong tanpa memanggil model', async () => {
   };
 
   await assert.rejects(() => assessBundle(emptyBundle, { plot: sarawakPlot }), /bundle kosong/);
+});
+
+// ─── Jalur kegagalan sitasi (R5) ──────────────────────────────────────────────
+//
+// Cabang-cabang ini tidak pernah terpicu oleh model sungguhan: Sonnet konsisten
+// menyitir id yang benar sejak percobaan pertama. Selama ini penanganan
+// kegagalannya karena itu hanya "diperiksa dengan dibaca" — dan kode penanganan
+// kegagalan yang belum pernah dijalankan adalah kode yang belum diketahui
+// bekerja. `guardCitations` menerima produser penilaian sehingga jalur itu bisa
+// dijalankan sungguhan.
+//
+// Ini BUKAN mock data terlarang (§0): yang disuntikkan adalah fungsi penghasil
+// untuk menguji logika kendali kita sendiri, bukan bukti karangan yang
+// berpura-pura hasil pengukuran. Tidak ada angka dari sini yang sampai ke layar.
+
+const VALID_IDS = ['deforestation:v1:z12:abc', 'sanctions:OFAC_SDN:2026-07-29:X'];
+
+function assessmentCiting(ids: string[]): AgentAssessment {
+  return {
+    verdict: 'FAIL',
+    confidence: 70,
+    findings: [
+      {
+        severity: 'major',
+        claim: 'klaim uji',
+        contradiction: 'kontradiksi uji',
+        evidenceIds: ids,
+      },
+    ],
+    summary: 'ringkasan uji',
+  };
+}
+
+test('guardCitations: sitasi sah pada percobaan pertama → tanpa pengulangan', async () => {
+  let calls = 0;
+  const { assessment, retried } = await guardCitations(async () => {
+    calls += 1;
+    return assessmentCiting([VALID_IDS[0]!]);
+  }, VALID_IDS);
+
+  assert.equal(calls, 1, 'tidak boleh memanggil model dua kali kalau sudah sah');
+  assert.equal(retried, false);
+  assert.equal(assessment.verdict, 'FAIL');
+});
+
+test('guardCitations: id palsu lalu benar → mengulang sekali, hasil kedua dipakai', async () => {
+  const corrections: (string | null)[] = [];
+  const { assessment, retried } = await guardCitations(async (correction) => {
+    corrections.push(correction);
+    return corrections.length === 1
+      ? assessmentCiting(['certification:RSPO:TIDAK_ADA:deadbeef'])
+      : assessmentCiting([VALID_IDS[1]!]);
+  }, VALID_IDS);
+
+  assert.equal(retried, true);
+  assert.equal(corrections.length, 2);
+  assert.equal(corrections[0], null, 'percobaan pertama tanpa koreksi');
+  assert.ok(corrections[1], 'percobaan kedua harus membawa sufiks koreksi');
+  // Koreksi wajib menyebut id yang salah DAN daftar id yang sah.
+  assert.match(corrections[1]!, /certification:RSPO:TIDAK_ADA:deadbeef/);
+  assert.match(corrections[1]!, /deforestation:v1:z12:abc/);
+  assert.equal(assessment.verdict, 'FAIL');
+  assert.deepEqual(assessment.findings[0]!.evidenceIds, [VALID_IDS[1]]);
+});
+
+test('guardCitations: gagal dua kali → INCONCLUSIVE yang menyatakan kegagalannya', async () => {
+  const { assessment, retried } = await guardCitations(
+    async () => assessmentCiting(['tidak:ada:1', 'tidak:ada:2']),
+    VALID_IDS,
+  );
+
+  assert.equal(retried, true);
+  assert.equal(assessment.verdict, 'INCONCLUSIVE');
+  assert.equal(assessment.confidence, 0);
+  // Temuan dikosongkan, TIDAK disaring diam-diam lalu sisanya dipakai.
+  assert.deepEqual(assessment.findings, []);
+  // Summary harus menyebut id tak sah dan menegaskan ini bukan "petak bersih".
+  assert.match(assessment.summary, /tidak:ada:1/);
+  assert.match(assessment.summary, /TIDAK DAPAT DIPERCAYA/);
+  assert.match(assessment.summary, /bukan berarti petak/);
+});
+
+test('guardCitations: sebagian id sah sebagian palsu tetap dianggap gagal', async () => {
+  const { assessment } = await guardCitations(
+    async () => assessmentCiting([VALID_IDS[0]!, 'tidak:ada:3']),
+    VALID_IDS,
+  );
+  // Satu sitasi palsu membuat seluruh penalaran tidak bisa dipercaya —
+  // finding yang "kebetulan benar" tidak diselamatkan.
+  assert.equal(assessment.verdict, 'INCONCLUSIVE');
 });

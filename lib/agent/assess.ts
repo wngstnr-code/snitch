@@ -154,31 +154,68 @@ export async function assessBundle(bundle: EvidenceBundle, ctx: AssessContext): 
   const validIds = bundle.items.map((i) => i.id);
   const basePrompt = buildUserPrompt({ bundle, ctx });
 
-  const first = await callModel(basePrompt);
+  const { assessment, retried } = await guardCitations(
+    (correction) => callModel(correction ? basePrompt + correction : basePrompt),
+    validIds,
+  );
+
+  return { assessment, retried, model: MODEL, assessedAt: new Date().toISOString() };
+}
+
+/**
+ * Menghasilkan satu penilaian; `correction` berisi sufiks prompt koreksi pada
+ * percobaan kedua, `null` pada percobaan pertama.
+ */
+export type AssessmentProducer = (
+  correction: string | null,
+) => Promise<AgentAssessment>;
+
+/**
+ * Disiplin sitasi (R5), dipisahkan dari pemanggilan model supaya bisa diuji.
+ *
+ * ─── Kenapa ini dipisah ──────────────────────────────────────────────────────
+ * Jalur paling penting di modul ini justru jalur yang paling jarang jalan:
+ * apa yang terjadi ketika model menyitir bukti yang tidak ada. Dengan model
+ * sungguhan, cabang itu tidak pernah terpicu — Sonnet konsisten menyitir id
+ * yang benar sejak percobaan pertama — jadi selama ini ia hanya "diperiksa
+ * dengan dibaca". Kode penanganan kegagalan yang belum pernah dijalankan
+ * adalah kode yang belum diketahui bekerja.
+ *
+ * Memisahkannya membuat penjaga ini bisa diuji dengan produser yang kita
+ * kendalikan. Itu BUKAN pelanggaran §0: yang disuntikkan di test adalah
+ * fungsi penghasil, bukan data bukti karangan yang berpura-pura hasil
+ * pengukuran. Tidak ada angka dari sini yang pernah sampai ke layar pengguna.
+ */
+export async function guardCitations(
+  produce: AssessmentProducer,
+  validIds: readonly string[],
+): Promise<{ assessment: AgentAssessment; retried: boolean }> {
+  const first = await produce(null);
   const firstCheck = validateCitations(first, validIds);
   if (firstCheck.valid) {
-    return { assessment: first, retried: false, model: MODEL, assessedAt: new Date().toISOString() };
+    return { assessment: first, retried: false };
   }
 
   // Satu kali percobaan ulang dengan pesan koreksi eksplisit (aturan keras #2).
-  const retryPrompt = basePrompt + correctionSuffix(firstCheck.invalidIds, validIds);
-  const second = await callModel(retryPrompt);
+  const second = await produce(correctionSuffix(firstCheck.invalidIds, validIds));
   const secondCheck = validateCitations(second, validIds);
   if (secondCheck.valid) {
-    return { assessment: second, retried: true, model: MODEL, assessedAt: new Date().toISOString() };
+    return { assessment: second, retried: true };
   }
 
   // Percobaan kedua masih menghasilkan sitasi tak sah: jangan diam-diam menyaring
   // finding yang salah dan berpura-pura sisanya bisa dipercaya. Nyatakan gagal.
-  const failedAssessment: AgentAssessment = {
-    verdict: 'INCONCLUSIVE',
-    confidence: 0,
-    findings: [],
-    summary:
-      `Agen kontradiksi menghasilkan evidenceId yang tidak ada di bundle bahkan setelah ` +
-      `satu kali percobaan koreksi (id tak sah: ${JSON.stringify(secondCheck.invalidIds)}). ` +
-      `Penilaian ini TIDAK DAPAT DIPERCAYA dan sengaja dikosongkan — bukan berarti petak ` +
-      `ini bersih, melainkan agen gagal bernalar dengan disiplin sitasi yang diwajibkan.`,
+  return {
+    assessment: {
+      verdict: 'INCONCLUSIVE',
+      confidence: 0,
+      findings: [],
+      summary:
+        `Agen kontradiksi menghasilkan evidenceId yang tidak ada di bundle bahkan setelah ` +
+        `satu kali percobaan koreksi (id tak sah: ${JSON.stringify(secondCheck.invalidIds)}). ` +
+        `Penilaian ini TIDAK DAPAT DIPERCAYA dan sengaja dikosongkan — bukan berarti petak ` +
+        `ini bersih, melainkan agen gagal bernalar dengan disiplin sitasi yang diwajibkan.`,
+    },
+    retried: true,
   };
-  return { assessment: failedAssessment, retried: true, model: MODEL, assessedAt: new Date().toISOString() };
 }
