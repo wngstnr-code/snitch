@@ -366,27 +366,63 @@ Test ujung-ke-ujung tidak berhenti di "berhasil unggah": ia **mengunduh ulang bu
 
 Lainnya: `bundleHash` tak bergantung urutan item tapi bergantung `evidenceAsOf` · `blobUrl` di luar hash · `evidenceId` ganda ditolak (R5) · `euOperator` opsional, dan ketiadaannya berarti "belum terverifikasi", bukan "lolos".
 
-**B5 — Contradiction agent** — `lib/agent/assess.ts`
-`generateObject` + zod, `temperature: 0`. Agen hanya menerima bundle; **tidak boleh memanggil API eksternal**.
-**Validasi keras:** setiap `evidenceId` di output harus ada di bundle. Kalau tidak → tolak dan ulangi sekali; masih gagal → `INCONCLUSIVE` + error jujur.
+**B5 — Contradiction agent** ✅ **SELESAI 2026-08-04** — `lib/agent/assess.ts` + `prompt.ts`, 4 test hijau
 
-**B6 — Job runner + endpoint** — `app/api/**`
-Semua endpoint di §0.3. Setiap panggilan eksternal: timeout eksplisit + retry backoff.
-**Kritis:** jangan pernah menelan error lalu mengembalikan array kosong. *"Gagal memeriksa" ≠ "bersih"* — kalau tertukar, produk ini justru menerbitkan attestation palsu. Error → status `failed` + pesan di UI.
+`generateObject` + zod, `temperature: 0`, model `anthropic/claude-sonnet-5` lewat AI Gateway. Agen tidak diberi tool dan tidak pernah menyentuh jaringan.
 
-**B7 — Terbit attestation** — `lib/chain/attest.ts`
-viem + EAS SDK. **Chain dari env** (`CHAIN_ID`) supaya mainnet ↔ Sepolia bisa ditukar satu variabel.
-Simpan `uid`, `txHash`, URL explorer & easscan.
+- Array `alerts` mentah **tidak pernah** masuk prompt — hanya `summary.byMonth` / `byConfidence` / `alertsAfterCutoff` + rentang tanggal. Bundle 149.256 alert tetap muat.
+- Validasi sitasi: id palsu → ulang sekali dengan daftar id sah → masih gagal → `INCONCLUSIVE` + summary yang menyebut kegagalannya. Tidak pernah menyaring finding diam-diam.
+- **Diperbaiki setelah uji nyata:** agen menyebut radius sourcing 50 km sebagai "petak" — melanggar §3.4. Prompt sekarang menyatakan arti geometri secara eksplisit; keluaran berubah jadi *"risiko sourcing … BUKAN bukti bahwa pabrik yang menebang"*.
 
-**B8 — Baca attestation** — `lib/chain/read.ts`
-EAS GraphQL Base (publik). Sumber kebenaran untuk halaman publik.
+⚠️ **Gap terbuka:** cross-check RSPO dikirim sebagai konteks, bukan butir bukti ber-`evidenceId`, jadi validator R5 menolaknya jadi finding formal — agen hanya bisa menyebutnya di summary. Perbaikan: `EvidenceKind` baru `'certification'` yang mengambil ulang kedua record ArcGIS saat verifikasi agar punya `rawHash` sendiri. **Belum dikerjakan.**
 
-**B9 — Watcher + revoke** — `app/api/cron/watch/route.ts`
-Untuk tiap attestation aktif: ambil alert terbaru → ada alert baru setelah `evidenceAsOf`? → `revoke()` onchain, simpan `revokeTxHash` + alasan.
-Juga terekspos sebagai `/recheck` manual (R6).
+**B6 — Job runner + endpoint** ✅ **SELESAI 2026-08-04** — `lib/jobs/run-verification.ts`, `lib/db/repo.ts`, `lib/plots/intake.ts` (10 test hijau), `lib/api/respond.ts`, `app/api/**`
 
-**B10 — Seed dataset pabrik** — `scripts/seed-mills.ts`
-Unduh GeoJSON dari ArcGIS FeatureServer → tabel `plots`. 1.431 titik nyata.
+Runner berhenti di `awaiting_review` — **selalu**. Penerbitan onchain adalah langkah terpisah yang butuh review manusia; kalau runner boleh menerbitkan sendiri, human review cuma hiasan UI.
+
+Terukur ujung-ke-ujung pada pabrik WA HA (`evidenceAsOf` 2026-06-01): **6 butir bukti · verdict FAIL · confidence 85 · 3 findings · nol sitasi palsu · 64,9 detik.**
+
+POST menjalankan verifikasi sampai selesai, bukan fire-and-forget: di serverless, kerja yang tidak di-`await` mati begitu respons dikirim.
+
+**Perubahan kontrak (butuh ack Dev A, keduanya aditif-opsional):** `CreateVerificationRequest.euOperator?` + kolom DB `eu_operator_*` (migrasi `0001`, sudah diterapkan). Tanpa ini F3 tidak punya jalan masuk sama sekali.
+
+**B7 — Terbit attestation** ✅ **SELESAI 2026-08-04** — `lib/chain/attest.ts`
+
+**Temuan yang membatalkan rencana awal:** UID hasil `simulateContract` **tidak pernah** sama dengan UID yang benar-benar termine. EAS menghitung UID memakai `block.timestamp` blok tempat tx masuk, bukan blok saat simulasi — terukur: simulate di blok 45027380 (ts 1785823048), mined di 45027382 (ts 1785823052), UID berbeda dari input identik. Mencocokkan keduanya membuat `issueAttestation` **selalu** melempar di chain hidup.
+Gantinya, dua konfirmasi yang kebal pergeseran timestamp: UID di-parse dari event `Attested`, lalu `getAttestation(uid)` dibaca ulang dan `attester` + `data`-nya diadu dengan yang dikirim. `simulateContract` tetap dipakai untuk menangkap revert sebelum transaksi terkirim.
+
+Retry berbackoff di sekitar `getBlock` dan `getAttestation` setelah receipt — RPC Base Sepolia di-load-balance dan sesekali melayani node yang tertinggal.
+
+**B8 — Baca attestation** ✅ **SELESAI 2026-08-04** — `lib/chain/read.ts`
+
+Kontrak adalah sumber kebenaran, GraphQL hanya untuk mendaftar. Kegagalan jaringan **melempar**, tidak pernah dikembalikan sebagai `null` — "gagal memeriksa" ≠ "tidak ada".
+
+**B9 — Watcher + revoke** ✅ **SELESAI 2026-08-04** — `lib/jobs/watch.ts`, `app/api/cron/watch/route.ts`, `/recheck` (R6), `vercel.json`
+
+Berurutan, bukan paralel: semua revoke dikirim dari satu wallet, paralel berarti tabrakan nonce. Kegagalan satu attestation tidak menghentikan sisanya, tapi juga tidak hilang — ia keluar di `errors` dan attestation itu **tidak** ditandai bersih.
+
+**Terbukti live lewat HTTP sungguhan, bukan lewat fungsi internal:**
+
+| | |
+|---|---|
+| Alert baru setelah `evidenceAsOf` | **6.899** (nyata, z12, 121 tile, v20260803) |
+| Revoke tx | `0x782721a3…` |
+| Waktu ujung-ke-ujung | **19,7 detik** |
+
+Dua bug ditemukan justru karena diuji, keduanya sudah diperbaiki: status verifikasi tidak ikut pindah ke `revoked`, dan attest ulang atas bundle yang sudah terbukti dibantah diizinkan (loop terbit-cabut).
+
+**B10 — Seed dataset pabrik** ✅ **SELESAI 2026-08-04** — `lib/evidence/mills.ts` + `scripts/seed-mills.ts`, 6 test hijau
+
+**Temuan yang mengubah desain:** dataset Unilever **tidak punya `UML_ID`** sama sekali, jadi join nama+jarak bukan pilihan melainkan keharusan. Ambang: kemiripan nama 0,8 + jarak 3 km.
+
+| | |
+|---|---|
+| UML total · Unilever total | 1.994 · 1.431 |
+| Malaysia (di-seed) | **500** |
+| Ter-join | 204 |
+| **Ketidaksepakatan RSPO** | **22** |
+
+Contoh nyata: WA HA & KOTA GELANGGI (FGV) — UML bilang certified, Unilever bilang tidak. RIMMER (KLK) — sebaliknya. Idempoten (`mill:<UML_ID>`), diverifikasi dengan dua kali jalan.
 
 ---
 
