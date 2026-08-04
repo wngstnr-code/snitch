@@ -181,6 +181,21 @@ export interface CreateVerificationRequest {
   operatorName: string;
   /** ISO. Bila kosong, server memakai waktu sekarang. Lihat R4. */
   evidenceAsOf?: string;
+  /**
+   * Operator/importir EU yang secara hukum wajib mengajukan DDS (CLAUDE.md §3.2).
+   * GLEIF dipakai untuk memverifikasi pihak INI, bukan eksportir Malaysia —
+   * cakupan GLEIF di MY praktis nihil dan pencocokan namanya menghasilkan
+   * false positive lintas yurisdiksi.
+   *
+   * Opsional. Bila kosong, bukti `legal_entity` TIDAK dibuat sama sekali, dan
+   * karena agen hanya boleh menyitir bukti yang ada, ketiadaannya otomatis
+   * berarti "belum terverifikasi" — bukan "lolos".
+   */
+  euOperator?: {
+    legalName: string;
+    /** ISO 3166-1 alpha-2. WAJIB bila `euOperator` diisi (R17). */
+    jurisdiction: string;
+  };
 }
 
 export interface PublicVerifyResponse {

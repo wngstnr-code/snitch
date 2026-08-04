@@ -81,6 +81,15 @@ export const verifications = pgTable(
     /** R4: parameter, BUKAN now(). Menentukan jendela bukti attestation. */
     evidenceAsOf: timestamp('evidence_as_of', { withTimezone: true }).notNull(),
 
+    /**
+     * Operator EU yang diverifikasi ke GLEIF (§3.2). Disimpan supaya
+     * "Re-verify now" (R6) bisa mengulang verifikasi yang sama persis —
+     * tanpa ini, pemeriksaan ulang diam-diam kehilangan sisi badan hukumnya
+     * dan hasilnya terlihat lebih bersih daripada yang pertama.
+     */
+    euOperatorName: text('eu_operator_name'),
+    euOperatorJurisdiction: text('eu_operator_jurisdiction'),
+
     bundleId: text('bundle_id'),
     bundleHash: text('bundle_hash'),
     bundleBlobUrl: text('bundle_blob_url'),
