@@ -7,7 +7,7 @@
  *
  * ─── Kenapa `evidenceAsOf`, bukan waktu penerbitan ───────────────────────────
  * Yang dibandingkan adalah alert yang terjadi SETELAH batas bukti attestation.
- * Attestation menyatakan "sepanjang yang diketahui per tanggal X"; alert
+ * Attestation menyatakan 'sepanjang yang diketahui per tanggal X'; alert
  * bertanggal setelah X adalah fakta yang belum diketahui saat itu — persis
  * definisi bukti yang membantah. Ini juga yang membuat demo revocation bisa
  * dijalankan tanpa memalsukan apa pun: terbitkan dengan batas bukti lampau
@@ -34,7 +34,7 @@ import type { WatchRunResult } from '../types';
 
 export interface WatchOptions {
   trigger: 'cron' | 'manual';
-  /** Batasi ke satu UID — dipakai tombol "Re-verify now" (R6). */
+  /** Batasi ke satu UID — dipakai tombol 'Re-verify now' (R6). */
   onlyUid?: string;
 }
 
@@ -73,78 +73,90 @@ export async function runWatch(opts: WatchOptions): Promise<WatchRunResult> {
     }
   }
 
-  for (const t of targets) {
-    const uid = t.attestation.uid as `0x${string}`;
-    try {
-      // Chain adalah sumber kebenaran, bukan DB kita. Attestation bisa saja
-      // sudah dicabut lewat jalur lain; mengirim revoke kedua hanya membakar
-      // gas dan menghasilkan error yang membingungkan.
-      const onchain = await readAttestation(uid);
-      if (!onchain) {
-        throw new Error(`Attestation ${uid} tercatat di DB tapi tidak ada di chain.`);
-      }
-      if (onchain.revoked) {
+  try {
+    for (const t of targets) {
+      const uid = t.attestation.uid as `0x${string}`;
+      try {
+        // Chain adalah sumber kebenaran, bukan DB kita. Attestation bisa saja
+        // sudah dicabut lewat jalur lain; mengirim revoke kedua hanya membakar
+        // gas dan menghasilkan error yang membingungkan.
+        const onchain = await readAttestation(uid);
+        if (!onchain) {
+          throw new Error(
+            `Attestation ${uid} tercatat di DB tapi tidak ada di chain.`,
+          );
+        }
+        if (onchain.revoked) {
+          await markRevoked({
+            uid,
+            // Bukan kita yang mencabutnya pada percobaan ini — kalau DB belum
+            // punya tx hash-nya, biarkan null. Mengisi penanda palsu berarti
+            // menaruh tautan explorer ke transaksi yang tidak pernah ada.
+            revokeTxHash: t.attestation.revokeTxHash,
+            revokedAt: onchain.revocationTime ?? new Date().toISOString(),
+            reason:
+              'Ditemukan sudah ter-revoke di chain saat pemeriksaan ulang.',
+          });
+          await setStatus(t.verification.id, 'revoked');
+          result.checked += 1;
+          continue;
+        }
+
+        const geom = t.plot.geojson as Geometry;
+        const fresh = await collectAlerts(geom);
+        const newAlerts = alertsAfter(fresh.alerts, t.attestation.evidenceAsOf);
+        result.checked += 1;
+
+        if (newAlerts === 0) {
+          await touchChecked(uid);
+          continue;
+        }
+
+        const reason =
+          `${newAlerts} alert deforestasi GFW bertanggal setelah evidenceAsOf ` +
+          `${t.attestation.evidenceAsOf.toISOString().slice(0, 10)} ` +
+          `(tile ${fresh.version}, z${fresh.zoom}, ${fresh.tilesScanned} tile). ` +
+          `Bukti ini tidak diketahui saat attestation diterbitkan dan membantahnya.`;
+
+        const revoked = await revokeAttestation(uid);
         await markRevoked({
           uid,
-          revokeTxHash: t.attestation.revokeTxHash ?? '0x',
-          revokedAt: onchain.revocationTime ?? new Date().toISOString(),
-          reason: 'Ditemukan sudah ter-revoke di chain saat pemeriksaan ulang.',
+          revokeTxHash: revoked.txHash,
+          revokedAt: revoked.revokedAt,
+          reason,
         });
+        // Status verifikasi ikut pindah, bukan hanya baris attestation-nya:
+        // daftar di UI membaca status, dan attestation yang sudah dicabut tapi
+        // masih tertulis 'attested' adalah persis kebohongan diam-diam yang
+        // dilawan produk ini.
         await setStatus(t.verification.id, 'revoked');
-        result.checked += 1;
-        continue;
+
+        result.revoked.push({
+          uid,
+          revokeTxHash: revoked.txHash,
+          reason,
+          newAlertsAfterEvidenceAsOf: newAlerts,
+        });
+      } catch (e) {
+        // Kegagalan satu attestation tidak boleh menghentikan pemeriksaan yang
+        // lain, tapi juga tidak boleh hilang: ia keluar di `errors` dan ikut
+        // tampil di UI. Attestation yang gagal diperiksa TIDAK ditandai bersih.
+        result.errors.push({ uid, error: messageOf(e) });
       }
-
-      const geom = t.plot.geojson as Geometry;
-      const fresh = await collectAlerts(geom);
-      const newAlerts = alertsAfter(fresh.alerts, t.attestation.evidenceAsOf);
-      result.checked += 1;
-
-      if (newAlerts === 0) {
-        await touchChecked(uid);
-        continue;
-      }
-
-      const reason =
-        `${newAlerts} alert deforestasi GFW bertanggal setelah evidenceAsOf ` +
-        `${t.attestation.evidenceAsOf.toISOString().slice(0, 10)} ` +
-        `(tile ${fresh.version}, z${fresh.zoom}, ${fresh.tilesScanned} tile). ` +
-        `Bukti ini tidak diketahui saat attestation diterbitkan dan membantahnya.`;
-
-      const revoked = await revokeAttestation(uid);
-      await markRevoked({
-        uid,
-        revokeTxHash: revoked.txHash,
-        revokedAt: revoked.revokedAt,
-        reason,
-      });
-      // Status verifikasi ikut pindah, bukan hanya baris attestation-nya:
-      // daftar di UI membaca status, dan attestation yang sudah dicabut tapi
-      // masih tertulis "attested" adalah persis kebohongan diam-diam yang
-      // dilawan produk ini.
-      await setStatus(t.verification.id, 'revoked');
-
-      result.revoked.push({
-        uid,
-        revokeTxHash: revoked.txHash,
-        reason,
-        newAlertsAfterEvidenceAsOf: newAlerts,
-      });
-    } catch (e) {
-      // Kegagalan satu attestation tidak boleh menghentikan pemeriksaan yang
-      // lain, tapi juga tidak boleh hilang: ia keluar di `errors` dan ikut
-      // tampil di UI. Attestation yang gagal diperiksa TIDAK ditandai bersih.
-      result.errors.push({ uid, error: messageOf(e) });
     }
+  } finally {
+    // Ditutup di `finally`: kalau runner mati di tengah, baris watch_runs yang
+    // menggantung selamanya membuat riwayat pemeriksaan tidak bisa dipercaya —
+    // dan riwayat itulah yang dipakai membuktikan attestation benar-benar
+    // dipantau, bukan sekadar diklaim dipantau.
+    await finishWatchRun({
+      id: run.id,
+      startedAt: run.startedAt,
+      checked: result.checked,
+      revokedCount: result.revoked.length,
+      errorCount: result.errors.length,
+    });
   }
-
-  await finishWatchRun({
-    id: run.id,
-    startedAt: run.startedAt,
-    checked: result.checked,
-    revokedCount: result.revoked.length,
-    errorCount: result.errors.length,
-  });
 
   return result;
 }

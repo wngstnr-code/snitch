@@ -294,7 +294,13 @@ export async function saveAttestation(input: {
 
 export async function markRevoked(input: {
   uid: string;
-  revokeTxHash: string;
+  /**
+   * null bila pencabutan tidak dilakukan oleh kita (mis. ditemukan sudah
+   * ter-revoke di chain). Jangan pernah mengisi nilai penanda seperti '0x':
+   * UI merender kolom ini sebagai tautan explorer, dan tautan ke transaksi
+   * yang tidak ada adalah bukti palsu.
+   */
+  revokeTxHash: string | null;
   revokedAt: string;
   reason: string;
 }): Promise<void> {
