@@ -16,6 +16,7 @@
     "db:push": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/drizzle-kit push",
     "db:studio": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/drizzle-kit studio",
     "sanctions:sync": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/sync-sanctions.ts",
+    "mills:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/seed-mills.ts",
     "services:check": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/check-services.ts",
     "chain:verify": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/verify-contracts.ts",
     "chain:check": "node --env-file-if-exists=.env.local --env-file-if-exists=.env node_modules/.bin/tsx scripts/check-chain.ts",
