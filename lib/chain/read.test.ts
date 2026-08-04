@@ -84,6 +84,32 @@ test('readAttestation pada UID acak yang tidak pernah dipakai -> null', async ()
   assert.equal(result, null);
 });
 
+/**
+ * Poll indexer EAS sampai UID muncul, dengan backoff linear.
+ *
+ * Mengembalikan `undefined` bila menyerah — pemanggil yang memutuskan apakah
+ * itu kegagalan. Sengaja tidak pernah "melunak jadi lulus": indexer yang lambat
+ * dan fitur yang rusak harus bisa dibedakan, dan keduanya bukan sukses.
+ */
+const POLL_MAX_ATTEMPTS = 6;
+
+async function pollIndexerForUid(
+  uid: Hex,
+  t: { diagnostic: (msg: string) => void },
+  maxAttempts: number = POLL_MAX_ATTEMPTS,
+): Promise<Awaited<ReturnType<typeof listOurAttestations>>[number] | undefined> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const list = await listOurAttestations(20);
+    const found = list.find((a) => a.uid.toLowerCase() === uid.toLowerCase());
+    if (found) return found;
+    if (attempt < maxAttempts) {
+      t.diagnostic(`indexer belum mengindeks UID (percobaan ${attempt}/${maxAttempts}), tunggu...`);
+      await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
+  }
+  return undefined;
+}
+
 test(
   'readAttestation & listOurAttestations pada attestation nyata',
   { timeout: 120_000 },
@@ -117,31 +143,44 @@ test(
     assert.equal(onchain?.revoked, false);
     assert.deepEqual(onchain?.decoded, d);
 
-    // Indexer GraphQL bisa lag beberapa detik di belakang kontrak. Poll
-    // dengan backoff, TIDAK dipaksa selalu lulus — kalau setelah beberapa
-    // percobaan tetap tidak muncul, laporkan sebagai kegagalan sungguhan
-    // (bukan disamarkan jadi "pass" atau di-skip).
-    let found: Awaited<ReturnType<typeof listOurAttestations>>[number] | undefined;
-    const maxAttempts = 6;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const list = await listOurAttestations(20);
-      found = list.find((a) => a.uid.toLowerCase() === issued.uid.toLowerCase());
-      if (found) break;
-      if (attempt < maxAttempts) {
-        t.diagnostic(`indexer belum mengindeks UID (percobaan ${attempt}/${maxAttempts}), tunggu...`);
-        await new Promise((r) => setTimeout(r, attempt * 3000));
-      }
-    }
-
+    const found = await pollIndexerForUid(issued.uid, t);
     if (!found) {
       throw new Error(
-        `Indexer EAS GraphQL belum mengindeks attestation ${issued.uid} setelah ${maxAttempts} percobaan ` +
-          `(total ~${(maxAttempts * (maxAttempts + 1)) / 2 * 3} detik). Ini bisa berarti indexer sedang lambat, ` +
-          `bukan berarti fitur listOurAttestations rusak — periksa manual di ${issued.easscanUrl}.`,
+        `Indexer EAS GraphQL belum mengindeks attestation ${issued.uid} setelah ${POLL_MAX_ATTEMPTS} percobaan. ` +
+          `Ini bisa berarti indexer sedang lambat, bukan berarti fitur listOurAttestations rusak — ` +
+          `periksa manual di ${issued.easscanUrl}.`,
       );
     }
 
     assert.equal(found.uid.toLowerCase(), issued.uid.toLowerCase());
     assert.deepEqual(found.decoded, d);
+  },
+);
+
+test(
+  'poll indexer MENYERAH pada UID yang tidak akan pernah ada, bukan menggantung atau lulus palsu',
+  { timeout: 120_000 },
+  async (t) => {
+    // Cabang "indexer tidak pernah mengejar" sebelumnya tidak pernah dijalankan:
+    // indexer selalu cepat, jadi loop poll di atas selalu keluar di percobaan
+    // pertama. Kode yang menangani kegagalan tapi belum pernah dieksekusi adalah
+    // kode yang belum diketahui bekerja.
+    //
+    // Di sini kondisinya dipicu SUNGGUHAN — bukan dengan memalsukan respons,
+    // melainkan dengan menanyakan UID acak yang memang tidak pernah diterbitkan
+    // siapa pun. Indexer sungguhan yang menjawab, dan jawabannya memang
+    // "tidak ada". Yang diuji: poll berhenti pada batasnya dan mengembalikan
+    // undefined, sehingga pemanggil bisa melaporkan kegagalan jujur.
+    const neverExists = `0x${'ab'.repeat(32)}` as Hex;
+
+    const t0 = Date.now();
+    const found = await pollIndexerForUid(neverExists, t, 3);
+    const elapsedS = (Date.now() - t0) / 1000;
+
+    assert.equal(found, undefined, 'UID yang tidak ada tidak boleh "ditemukan"');
+    // Membuktikan ia benar-benar mengulang dan menunggu, bukan langsung menyerah
+    // di percobaan pertama: backoff 3 s + 6 s antara tiga percobaan.
+    assert.ok(elapsedS >= 9, `poll terlalu cepat menyerah: ${elapsedS.toFixed(1)} s`);
+    t.diagnostic(`menyerah setelah 3 percobaan dalam ${elapsedS.toFixed(1)} s — sesuai harapan`);
   },
 );
