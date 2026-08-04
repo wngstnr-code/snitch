@@ -9,7 +9,6 @@ import {
   EAS_ADDRESS,
   attestationUrl,
   getChainConfig,
-  SNITCH_SCHEMA,
   txExplorerUrl,
 } from './config';
 import { EAS_ABI, getAttesterAccount, getPublicClient } from './eas';
@@ -31,7 +30,16 @@ export interface OnchainAttestation {
 }
 
 const EMPTY_UID: Hex = `0x${'0'.repeat(64)}`;
-const EMPTY_SCHEMA_UID = process.env.EAS_SCHEMA_UID as Hex | undefined;
+
+/**
+ * Dibaca per panggilan, bukan sekali saat modul dimuat. Modul ini juga dipakai
+ * dari script dan test yang memuat `.env` setelah import teratasi; nilai yang
+ * dibekukan saat load bisa `undefined` di jalur itu, dan akibatnya seluruh
+ * attestation kita akan dilaporkan "bukan schema SNITCH" — gagal senyap.
+ */
+function snitchSchemaUid(): Hex | undefined {
+  return process.env.EAS_SCHEMA_UID as Hex | undefined;
+}
 
 /**
  * Baca satu attestation langsung dari kontrak EAS. `null` HANYA bila
@@ -54,9 +62,10 @@ export async function readAttestation(uid: Hex): Promise<OnchainAttestation | nu
     return null;
   }
 
+  const ourSchema = snitchSchemaUid();
   let decoded: SnitchAttestationData | null = null;
   const isSnitchSchema =
-    !!EMPTY_SCHEMA_UID && record.schema.toLowerCase() === EMPTY_SCHEMA_UID.toLowerCase();
+    !!ourSchema && record.schema.toLowerCase() === ourSchema.toLowerCase();
   if (isSnitchSchema) {
     try {
       decoded = decodeSnitchData(record.data);
@@ -80,15 +89,53 @@ export async function readAttestation(uid: Hex): Promise<OnchainAttestation | nu
         : new Date(Number(record.revocationTime) * 1000).toISOString(),
     revocable: record.revocable,
     chainId: cfg.chainId,
-    // Struct `Attestation` di kontrak EAS TIDAK menyimpan txHash, jadi tidak
-    // ada cara membangun link basescan (tx) yang jujur dari sini. easscan
-    // punya halaman per-UID yang cukup untuk verifikasi manual, jadi dipakai
-    // untuk keduanya. `listOurAttestations` (via GraphQL indexer, yang punya
-    // `txid`) memberi `explorerUrl` yang lebih spesifik.
+    // Struct `Attestation` di kontrak EAS TIDAK menyimpan txHash, jadi dari
+    // kontrak saja tidak ada cara jujur membangun tautan transaksi. Pemanggil
+    // yang membutuhkannya memakai `lookupAttestationTxHash` (indexer).
     explorerUrl: attestationUrl(record.uid),
     easscanUrl: attestationUrl(record.uid),
     decoded,
   };
+}
+
+const TX_QUERY = `
+  query TxOfAttestation($uid: String!) {
+    attestation(where: { id: $uid }) {
+      txid
+    }
+  }
+`;
+
+/**
+ * Tx hash penerbitan sebuah attestation, dari indexer EAS.
+ *
+ * `null` bila indexer belum/tidak mengenalnya — dan itu memang jawaban yang
+ * benar, bukan kegagalan. Sengaja TIDAK melempar: pemanggilnya adalah halaman
+ * verifikasi publik, yang kebenarannya bersandar pada kontrak. Indexer di sini
+ * cuma pemanis tautan; membuat halaman verifikasi mati gara-gara indexer
+ * sedang sakit akan menukar hal yang penting demi hal yang tidak.
+ */
+export async function lookupAttestationTxHash(uid: Hex): Promise<Hex | null> {
+  const cfg = getChainConfig();
+  try {
+    const res = await fetchWithTimeout(
+      cfg.easGraphqlUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: TX_QUERY, variables: { uid } }),
+      },
+      GRAPHQL_TIMEOUT_MS,
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: { attestation?: { txid?: string } | null };
+    };
+    const txid = json.data?.attestation?.txid;
+    return txid && /^0x[0-9a-fA-F]{64}$/.test(txid) ? (txid as Hex) : null;
+  } catch {
+    return null;
+  }
 }
 
 interface GraphqlAttestationNode {
