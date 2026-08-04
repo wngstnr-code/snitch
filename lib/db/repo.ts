@@ -189,7 +189,10 @@ export async function saveEvidence(
         payload: e,
       })),
     )
-    .onConflictDoNothing({ target: evidenceItems.id });
+    // Kunci majemuk: bukti yang sama boleh muncul di banyak verifikasi.
+    .onConflictDoNothing({
+      target: [evidenceItems.verificationId, evidenceItems.id],
+    });
 }
 
 export async function saveBundle(

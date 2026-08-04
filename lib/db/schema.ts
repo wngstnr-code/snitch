@@ -10,6 +10,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -17,13 +18,10 @@ import {
 } from 'drizzle-orm/pg-core';
 import type {
   AgentAssessment,
-  DeforestationEvidence,
   Evidence,
   EvidenceKind,
   HumanReview,
-  LegalEntityEvidence,
   Plot,
-  SanctionsEvidence,
   VerificationStatus,
   Verdict,
 } from '../types';
@@ -118,8 +116,19 @@ export const verifications = pgTable(
 export const evidenceItems = pgTable(
   'evidence_items',
   {
-    /** `Evidence.id` — inilah yang disitir agen dan divalidasi keras (R5). */
-    id: text('id').primaryKey(),
+    /**
+     * `Evidence.id` — inilah yang disitir agen dan divalidasi keras (R5).
+     *
+     * BUKAN primary key sendirian. Id bukti bersifat deterministik dari isinya
+     * (mis. hash tile + geometri), jadi dua verifikasi atas petak yang sama
+     * dengan batas bukti yang sama menghasilkan id yang identik — dan itu
+     * memang benar, bukti yang sama ya bukti yang sama. Dengan id sebagai PK
+     * tunggal, penyimpanan verifikasi kedua ditolak senyap dan bundle-nya
+     * tampil kehilangan sebagian besar buktinya. Kuncinya majemuk bersama
+     * `verification_id`; keunikan yang dituntut R5 adalah keunikan DI DALAM
+     * satu bundle, dan itu tetap terjaga.
+     */
+    id: text('id').notNull(),
     verificationId: text('verification_id')
       .notNull()
       .references(() => verifications.id, { onDelete: 'cascade' }),
@@ -128,16 +137,19 @@ export const evidenceItems = pgTable(
     fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
     rawHash: text('raw_hash').notNull(),
 
-    /** Payload lengkap sesuai varian di lib/types.ts. */
-    payload: jsonb('payload')
-      .$type<DeforestationEvidence | LegalEntityEvidence | SanctionsEvidence>()
-      .notNull(),
+    /**
+     * Payload lengkap sesuai varian di lib/types.ts. Sengaja memakai union
+     * `Evidence` itu sendiri, bukan daftar varian yang disalin: menyalinnya
+     * berarti tiap penambahan jenis bukti baru gagal senyap di lapisan DB.
+     */
+    payload: jsonb('payload').$type<Evidence>().notNull(),
 
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (t) => [
+    primaryKey({ columns: [t.verificationId, t.id] }),
     index('evidence_items_verification_idx').on(t.verificationId),
     index('evidence_items_kind_idx').on(t.kind),
   ],
