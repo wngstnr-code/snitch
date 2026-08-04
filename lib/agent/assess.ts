@@ -1,3 +1,4 @@
+
 /**
  * B5 — Agen kontradiksi.
  *

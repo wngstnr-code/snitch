@@ -17,12 +17,12 @@ const failures: string[] = [];
 
 async function checkAiGateway() {
   const { text } = await generateText({
-    model: google('gemini-1.5-flash'),
+    model: google('gemini-2.5-flash'),
     prompt: 'Reply with exactly this token and nothing else: SNITCH_GATEWAY_OK',
     temperature: 0,
   });
   const ok = text.trim() === 'SNITCH_GATEWAY_OK';
-  console.log(`  ${ok ? '✔' : '✘'} Google AI (gemini-1.5-flash): ${JSON.stringify(text.trim())}`);
+  console.log(`  ${ok ? '✔' : '✘'} Google AI (gemini-2.5-flash): ${JSON.stringify(text.trim())}`);
   if (!ok) failures.push('Google AI');
 }
 
