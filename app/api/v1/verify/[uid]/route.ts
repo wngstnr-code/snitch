@@ -15,15 +15,77 @@
 
 import type { NextRequest } from 'next/server';
 import { createHash } from 'node:crypto';
-import { readAttestation } from '../../../../../lib/chain/read';
+import {
+  lookupAttestationTxHash,
+  readAttestation,
+} from '../../../../../lib/chain/read';
 import { handle, messageOf, ok } from '../../../../../lib/api/respond';
-import { getChainConfig } from '../../../../../lib/chain/config';
+import { getChainConfig, txExplorerUrl } from '../../../../../lib/chain/config';
 import type { Evidence, EvidenceBundle, PublicVerifyResponse } from '../../../../../lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const UID_RE = /^0x[0-9a-fA-F]{64}$/;
+
+/** Bundle terbesar yang pernah dirakit jauh di bawah ini (lihat MAX_BUNDLE_BYTES). */
+const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
+
+/**
+ * `evidenceUri` berasal dari data attestation, dan SIAPA PUN bisa menerbitkan
+ * attestation pada schema publik kita. Artinya string ini adalah masukan tak
+ * tepercaya yang menyuruh server kita melakukan permintaan HTTP — persis
+ * bentuk SSRF. Tolak apa pun yang bukan https ke host publik.
+ */
+function assertFetchableUri(uri: string): void {
+  let u: URL;
+  try {
+    u = new URL(uri);
+  } catch {
+    throw new Error(`evidenceUri bukan URL yang sah: ${uri}`);
+  }
+  if (u.protocol !== 'https:') {
+    throw new Error(`evidenceUri harus https, dapat: ${u.protocol}`);
+  }
+  if (isNonPublicHost(u.hostname)) {
+    throw new Error(`evidenceUri menunjuk host non-publik: ${u.hostname}`);
+  }
+}
+
+/**
+ * Diekspor untuk diuji. Ini penyaring berbasis nama, bukan resolusi DNS —
+ * ia tidak menangkap nama publik yang sengaja diarahkan ke alamat internal.
+ * Perlindungan sesungguhnya adalah isolasi jaringan runtime; ini lapisan
+ * murah yang menutup vektor yang paling gampang dipakai.
+ */
+export function isNonPublicHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+
+  // Literal IPv6 selalu ditulis dalam kurung siku di URL.
+  if (host.startsWith('[')) return true;
+
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.local')
+  ) {
+    return true;
+  }
+
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!ipv4) return false;
+
+  const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+  return (
+    a === 0 || // 0.0.0.0/8
+    a === 10 || // privat
+    a === 127 || // loopback
+    (a === 169 && b === 254) || // link-local, termasuk metadata cloud
+    (a === 172 && b >= 16 && b <= 31) || // privat
+    (a === 192 && b === 168) // privat
+  );
+}
 
 /**
  * Mengunduh bundle dan MEMBUKTIKAN ia adalah berkas yang di-anchor.
@@ -35,9 +97,19 @@ async function fetchAndProveBundle(
   uri: string,
   expectedHash: string,
 ): Promise<{ bundle: EvidenceBundle | null; error: string | null }> {
+  try {
+    assertFetchableUri(uri);
+  } catch (e) {
+    return { bundle: null, error: messageOf(e) };
+  }
+
   let res: Response;
   try {
-    res = await fetch(uri, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+    res = await fetch(uri, {
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(30_000),
+    });
   } catch (e) {
     return { bundle: null, error: `Bundle bukti tidak bisa diunduh: ${messageOf(e)}` };
   }
@@ -45,7 +117,23 @@ async function fetchAndProveBundle(
     return { bundle: null, error: `Bundle bukti tidak bisa diunduh: HTTP ${res.status} dari ${uri}` };
   }
 
+  // Batas ukuran ditegakkan dua kali: dari header kalau ada, dan dari byte yang
+  // benar-benar terbaca kalau server berbohong atau tidak mengirim header.
+  const declared = Number(res.headers.get('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > MAX_DOWNLOAD_BYTES) {
+    return {
+      bundle: null,
+      error: `Bundle terlalu besar (${declared} byte, batas ${MAX_DOWNLOAD_BYTES}).`,
+    };
+  }
+
   const text = await res.text();
+  if (Buffer.byteLength(text) > MAX_DOWNLOAD_BYTES) {
+    return {
+      bundle: null,
+      error: `Bundle melampaui batas ${MAX_DOWNLOAD_BYTES} byte setelah diunduh.`,
+    };
+  }
   const actual = createHash('sha256').update(text).digest('hex');
   const expected = expectedHash.replace(/^0x/, '').toLowerCase();
   if (actual !== expected) {
@@ -108,9 +196,19 @@ export async function GET(
       return ok(body, { status: 404 });
     }
 
-    const { bundle, error } = a.decoded
-      ? await fetchAndProveBundle(a.decoded.evidenceUri, a.decoded.evidenceHash)
-      : { bundle: null, error: 'Data attestation tidak sesuai schema SNITCH — tidak bisa didekode.' };
+    const [proof, txHash] = await Promise.all([
+      a.decoded
+        ? fetchAndProveBundle(a.decoded.evidenceUri, a.decoded.evidenceHash)
+        : Promise.resolve({
+            bundle: null,
+            error: 'Data attestation tidak sesuai schema SNITCH — tidak bisa didekode.',
+          }),
+      // Best-effort: kontrak tidak menyimpan tx hash. Kalau indexer tidak
+      // menjawab, tautan jatuh ke halaman easscan attestation ini — halaman
+      // nyata untuk UID ini, bukan tautan karangan.
+      lookupAttestationTxHash(a.uid),
+    ]);
+    const { bundle, error } = proof;
 
     const body: PublicVerifyResponse = {
       uid: a.uid,
@@ -122,7 +220,7 @@ export async function GET(
         attester: a.attester,
         schemaUid: a.schemaUid,
         chainId: a.chainId,
-        explorerUrl: a.explorerUrl,
+        explorerUrl: txHash ? txExplorerUrl(txHash) : a.easscanUrl,
         easscanUrl: a.easscanUrl,
       },
       decoded: a.decoded
