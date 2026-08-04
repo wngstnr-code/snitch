@@ -1,0 +1,128 @@
+name: Watcher otonom
+
+# Kenapa GitHub Actions dan bukan Vercel Cron saja:
+# Vercel Hobby hanya melayani cron harian. Attestation yang mengklaim
+# "mencabut dirinya sendiri" tapi baru memeriksa sekali sehari adalah klaim
+# yang lemah. Actions bisa 15 menit, gratis, dan tidak menambah biaya hosting.
+#
+# Kenapa HANYA memicu, bukan menjalankan pipeline-nya di sini:
+# kalau watcher dijalankan di dalam Actions, kode yang berjalan otonom bukan
+# lagi kode yang di-deploy. Ia butuh salinan DATABASE_URL, kunci privat
+# attester, dan token Blob di dalam CI — memperbanyak tempat rahasia disimpan
+# demi tidak mendapat apa-apa. Runner di sini hanya mengetuk endpoint produksi,
+# jadi yang berjalan tiap 15 menit persis kode yang sama dengan yang dipakai
+# tombol "Re-verify now" di UI.
+
+on:
+  schedule:
+    # Tiap 15 menit. GitHub menjadwalkan best-effort dan bisa telat saat sibuk;
+    # itu dapat diterima — watcher bersifat idempoten, menjalankannya lebih
+    # sering atau lebih jarang tidak mengubah hasil, hanya kesegarannya.
+    - cron: '*/15 * * * *'
+    # Sanksi cukup harian: OFAC dan EU menerbitkan paling sering harian, dan
+    # tiap sinkronisasi mengunduh ~37 MB dari server pemerintah.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job yang dijalankan manual
+        required: true
+        default: watch
+        type: choice
+        options: [watch, sanctions]
+
+# Dua run bersamaan berarti dua proses mengirim transaksi revoke dari wallet
+# yang sama — tabrakan nonce. Antre, jangan batalkan yang sedang jalan.
+concurrency:
+  group: snitch-watcher
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Tentukan endpoint
+        id: pilih
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL: ${{ inputs.job }}
+        run: |
+          set -euo pipefail
+          if [ "${SCHEDULE}" = "0 2 * * *" ] || [ "${MANUAL}" = "sanctions" ]; then
+            echo "path=/api/cron/sanctions" >> "$GITHUB_OUTPUT"
+            echo "label=sinkronisasi daftar sanksi" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=/api/cron/watch" >> "$GITHUB_OUTPUT"
+            echo "label=watcher deforestasi" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Panggil endpoint produksi
+        env:
+          BASE_URL: ${{ secrets.SNITCH_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PATH_: ${{ steps.pilih.outputs.path }}
+          LABEL: ${{ steps.pilih.outputs.label }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BASE_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "::error::SNITCH_BASE_URL dan CRON_SECRET wajib diset sebagai repository secret."
+            exit 1
+          fi
+
+          echo "Menjalankan ${LABEL} → ${BASE_URL}${PATH_}"
+
+          # Kegagalan HTTP TIDAK boleh menghentikan step di sini. Justru pada
+          # kegagalanlah badan respons paling berharga: seluruh API ini
+          # dirancang mengembalikan pesan error yang bisa dibaca manusia, dan
+          # kalau `set -e` memutus step tepat saat curl gagal, pesan itu hilang
+          # persis ketika paling dibutuhkan. Jadi: tangkap dulu, laporkan, baru
+          # putuskan gagal/tidaknya di akhir.
+          set +e
+          curl --silent --show-error \
+               --max-time 300 \
+               --header "Authorization: Bearer ${CRON_SECRET}" \
+               --write-out '\n%{http_code}' \
+               --output /tmp/resp.txt \
+               "${BASE_URL}${PATH_}" > /tmp/code.txt
+          curl_rc=$?
+          set -e
+
+          body=$(cat /tmp/resp.txt 2>/dev/null || echo '(tanpa badan respons)')
+          http=$(tr -d '[:space:]' < /tmp/code.txt 2>/dev/null || echo '000')
+
+          echo "HTTP ${http} (curl rc=${curl_rc})"
+          echo "${body}"
+
+          # Ringkasan yang terbaca langsung di halaman run, tanpa harus
+          # membuka log.
+          {
+            echo "### ${LABEL}"
+            echo ""
+            echo "HTTP \`${http}\`"
+            echo ""
+            echo '```json'
+            echo "${body}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Watcher yang melaporkan error per-attestation tetap HTTP 200 —
+          # itu memang benar, sebagian attestation gagal diperiksa bukan
+          # berarti seluruh run gagal. Tapi kegagalan itu tidak boleh hilang
+          # diam-diam dari halaman Actions.
+          if echo "${body}" | grep -q '"errors":\[{'; then
+            echo "::warning::Ada attestation yang gagal diperiksa — lihat ringkasan."
+          fi
+
+          if [ "${curl_rc}" -ne 0 ]; then
+            echo "::error::curl gagal (rc=${curl_rc}) — endpoint tidak terjangkau atau timeout."
+            exit 1
+          fi
+          case "${http}" in
+            2*) ;;
+            *)
+              echo "::error::${LABEL} menjawab HTTP ${http}."
+              exit 1
+              ;;
+          esac

@@ -514,6 +514,28 @@ Pembacaan baris-per-baris seluruh `lib/**` dan `app/api/**` setelah B5–B10 sel
 
 **8. Balapan attest.** Guard "sudah punya attestation?" berjalan sebelum transaksi onchain yang makan puluhan detik; dua permintaan bersamaan sama-sama lolos. Kini index unik **parsial** `(verification_id) WHERE revoked = false` (migrasi `0003`). Parsial dengan sengaja: attestation yang sudah dicabut adalah peristiwa onchain nyata, dan riwayatnya tidak boleh dipaksa hilang demi memenuhi batasan.
 
+### Ditutup menyusul — tiga hal yang sebelumnya dinyatakan terbuka
+
+**9. Cabang retry sitasi tidak pernah dijalankan.** Model sungguhan konsisten menyitir id yang benar sejak percobaan pertama, jadi seluruh penanganan kegagalan R5 selama ini hanya "diperiksa dengan dibaca" — dan kode penanganan kegagalan yang belum pernah dieksekusi adalah kode yang belum diketahui bekerja. Disiplin sitasinya dipisah jadi `guardCitations(produce, validIds)` sehingga bisa dijalankan sungguhan. 4 test: lolos di percobaan pertama, gagal-lalu-benar (memeriksa sufiks koreksi memuat id salah **dan** daftar id sah), gagal dua kali → `INCONCLUSIVE` berkonfidensi 0 dengan summary yang menyebut kegagalannya, dan sebagian-sah-sebagian-palsu yang tetap dianggap gagal total.
+
+Bukan pelanggaran §0: yang disuntikkan adalah fungsi penghasil untuk menguji logika kendali kita sendiri, bukan bukti karangan yang berpura-pura hasil pengukuran. Tidak ada angka dari sana yang sampai ke layar.
+
+**10. Cabang indexer-lag tidak pernah dijalankan.** Dipicu sungguhan tanpa memalsukan apa pun: poll menanyakan UID acak yang memang tidak pernah diterbitkan siapa pun. Indexer sungguhan yang menjawab, dan jawabannya memang "tidak ada". Test memastikan poll **menyerah** pada batasnya (≥ 9 detik, membuktikan ia benar-benar mengulang dan menunggu) dan mengembalikan `undefined`, sehingga pemanggil melaporkan kegagalan jujur alih-alih lulus palsu.
+
+**11. Saldo faucet habis menghasilkan error kriptik.** `npm test` memang mengirim transaksi sungguhan tiap jalan — diterima, tinggal isi ulang faucet. Tapi saat habis, yang muncul adalah `insufficient funds for gas * price + value` dari RPC, dan di alur demo ia menyamar sebagai verifikasi `failed` yang misterius. `assertAttesterFunded` kini memeriksa saldo terhadap perkiraan biaya nyata (gas × gasPrice) **sebelum** transaksi terkirim, dan pesannya menyebut angkanya plus tautan faucet. Berlaku di produksi juga, bukan cuma di test.
+
+### Otonomi — GitHub Actions sebagai pemicu
+
+Vercel Hobby hanya melayani cron harian; attestation yang mengklaim mencabut dirinya sendiri tapi baru memeriksa sekali sehari adalah klaim yang lemah. `.github/workflows/watcher.yml` menjadwalkan watcher **tiap 15 menit** dan sinkronisasi sanksi harian.
+
+Actions **hanya memicu**, tidak menjalankan pipeline-nya. Kalau watcher berjalan di dalam CI, kode yang otonom bukan lagi kode yang di-deploy: ia butuh salinan `DATABASE_URL`, kunci privat attester, dan token Blob di GitHub — memperbanyak tempat rahasia disimpan tanpa mendapat apa pun. Runner hanya mengetuk endpoint produksi, jadi yang jalan tiap 15 menit persis kode yang sama dengan tombol "Re-verify now".
+
+`concurrency` mengantre, tidak membatalkan: dua run bersamaan berarti dua proses mengirim revoke dari wallet yang sama — tabrakan nonce.
+
+Diuji sungguhan sebelum dipercaya, bukan hanya ditulis: skrip step diekstrak dari YAML dan dijalankan melawan server lokal. Kasus sehat → exit 0; endpoint tidak ada → badan respons tetap tercetak, anotasi error muncul, exit 1. Versi pertama punya bug nyata di sini — `set -e` menghentikan step tepat saat curl gagal, sehingga pesan error jujur dari API hilang persis ketika paling dibutuhkan.
+
+**Wajib diset sebagai repository secret:** `SNITCH_BASE_URL` dan `CRON_SECRET`.
+
 ### Diperbaiki sekalian
 `explorerUrl` pada verifikasi publik dulu menunjuk easscan, menduplikasi `easscanUrl` — kontrak EAS memang tidak menyimpan tx hash. Kini diambil dari indexer (`lookupAttestationTxHash`, terverifikasi via curl) dan jatuh ke easscan kalau indexer diam. Juga: `EAS_SCHEMA_UID` dulu dibaca sekali saat modul dimuat, yang di jalur script/test bisa `undefined` dan membuat **semua** attestation kita dilaporkan "bukan schema SNITCH" — gagal senyap.
 
