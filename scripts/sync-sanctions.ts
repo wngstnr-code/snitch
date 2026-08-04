@@ -3,7 +3,9 @@
  *
  *   npm run sanctions:sync
  *
- * Dijalankan manual saat pengembangan, dan dari cron watcher di produksi.
+ * Dijalankan manual saat pengembangan. Di produksi jalurnya adalah
+ * `GET /api/cron/sanctions` (Vercel Cron, lihat vercel.json) — kode yang sama,
+ * dipanggil terjadwal.
  * Idempoten: isi tiap daftar diganti utuh, jadi menjalankannya dua kali aman.
  */
 

@@ -6,13 +6,14 @@
  * untuk pemeriksaan on-demand (R6) — dua pintu, satu runner, supaya yang
  * didemokan persis kode yang jalan di produksi.
  *
- * Diamankan `CRON_SECRET` bila variabelnya diset: endpoint ini mengirim
- * transaksi onchain, jadi ia tidak boleh bisa dipicu siapa saja.
+ * Diamankan `CRON_SECRET`. Di deployment, ketiadaan secret adalah error dan
+ * BUKAN izin — endpoint ini mengirim transaksi onchain (lihat lib/api/cron-auth.ts).
  */
 
 import type { NextRequest } from 'next/server';
 import { runWatch } from '../../../../lib/jobs/watch';
-import { fail, handle, ok } from '../../../../lib/api/respond';
+import { handle, ok } from '../../../../lib/api/respond';
+import { checkCronAuth } from '../../../../lib/api/cron-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,13 +21,8 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest): Promise<Response> {
   return handle(async () => {
-    const secret = process.env.CRON_SECRET;
-    if (secret) {
-      const auth = request.headers.get('authorization');
-      if (auth !== `Bearer ${secret}`) {
-        return fail(401, 'Tidak berwenang menjalankan watcher.');
-      }
-    }
+    const denied = checkCronAuth(request);
+    if (denied) return denied;
     return ok(await runWatch({ trigger: 'cron' }));
   });
 }
