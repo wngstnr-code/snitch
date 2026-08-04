@@ -486,6 +486,39 @@ Bangun melawan `lib/types.ts` sejak menit pertama. Panggil endpoint sungguhan; s
 
 ---
 
+## Audit backend + onchain — 2026-08-04
+
+Pembacaan baris-per-baris seluruh `lib/**` dan `app/api/**` setelah B5–B10 selesai. Delapan temuan, semuanya sudah ditutup.
+
+### Melanggar §0 — bukti palsu
+
+**1. Tx hash karangan `'0x'`.** Saat watcher menemukan attestation sudah ter-revoke di chain lewat jalur lain, ia menulis `revokeTxHash: '0x'` ke DB. UI merender kolom itu sebagai tautan explorer → tautan ke transaksi yang tidak pernah ada. Sekarang `null`, dan tipenya memaksa pemanggil memikirkannya.
+
+### Keamanan
+
+**2. SSRF di endpoint verifikasi publik.** `evidenceUri` dibaca dari data attestation, dan schema SNITCH bersifat publik — **siapa pun bisa menerbitkan attestation di atasnya**, lalu memanggil endpoint kita untuk memaksa server mengambil URL pilihannya, termasuk `169.254.169.254` (metadata cloud). Kini: wajib https, host non-publik ditolak, redirect dimatikan, batas unduh 25 MB ditegakkan dua kali (header + byte terbaca). 3 test.
+
+**3. Cron gagal-terbuka.** `CRON_SECRET` bersifat opsional; kalau lupa diisi di dashboard Vercel, `/api/cron/watch` terbuka untuk siapa saja — dan endpoint itu mengirim transaksi onchain. Kondisi yang paling mungkin terjadi (lupa isi env) adalah persis kondisi yang membuka lubangnya. Kini di deployment ketiadaan secret adalah **error, bukan izin**. 5 test.
+
+### Operasional
+
+**4. Daftar sanksi tidak punya jalur penyegaran di produksi.** `screenEntity` melempar bila daftar berumur > 30 hari — pilihan yang benar. Konsekuensinya: **seluruh verifikasi berhenti bekerja 30 hari setelah deployment**, dan satu-satunya penyegaran adalah `npm run sanctions:sync` dari laptop seseorang. Komentar di script bahkan sudah mengklaim ada cron yang tidak pernah dibuat. Kini `GET /api/cron/sanctions` + entri di `vercel.json`. Terbukti: 19.181 + 31.068 entri tersinkron.
+
+**5. `watch_runs` menggantung.** `finishWatchRun` tidak di `finally`, jadi runner yang mati di tengah meninggalkan baris terbuka selamanya — riwayat yang dipakai membuktikan attestation benar-benar dipantau jadi tidak bisa dipercaya.
+
+### Integritas
+
+**6. Hash di-anchor tanpa membuktikan berkasnya terjangkau.** `verifyPublishedBundle` sudah ada sejak B4 tapi tidak pernah dipanggil runner. Kini bundle diunduh ulang dan hash-nya dihitung ulang **sebelum** hash itu ditulis ke chain — anchor bersifat permanen, dan verifikator pihak ketiga yang akan menemukan masalahnya kalau kita tidak.
+
+**7. Override manusia tak terbaca di chain.** `confidence` adalah keyakinan agen atas penilaiannya sendiri. Kalau manusia menimpa FAIL→PASS, pembaca onchain melihat `PASS` ber-`confidence 85` tanpa cara apa pun tahu bahwa 85 itu keyakinan mesin pada **FAIL**. Schema tidak punya field untuk ini, jadi override dinyatakan di `reviewedBy` — satu-satunya field teks milik manusia.
+
+**8. Balapan attest.** Guard "sudah punya attestation?" berjalan sebelum transaksi onchain yang makan puluhan detik; dua permintaan bersamaan sama-sama lolos. Kini index unik **parsial** `(verification_id) WHERE revoked = false` (migrasi `0003`). Parsial dengan sengaja: attestation yang sudah dicabut adalah peristiwa onchain nyata, dan riwayatnya tidak boleh dipaksa hilang demi memenuhi batasan.
+
+### Diperbaiki sekalian
+`explorerUrl` pada verifikasi publik dulu menunjuk easscan, menduplikasi `easscanUrl` — kontrak EAS memang tidak menyimpan tx hash. Kini diambil dari indexer (`lookupAttestationTxHash`, terverifikasi via curl) dan jatuh ke easscan kalau indexer diam. Juga: `EAS_SCHEMA_UID` dulu dibaca sekali saat modul dimuat, yang di jalur script/test bisa `undefined` dan membuat **semua** attestation kita dilaporkan "bukan schema SNITCH" — gagal senyap.
+
+---
+
 ## Definition of Done
 
 - [ ] F1–F9 jalan dengan data nyata ujung-ke-ujung
