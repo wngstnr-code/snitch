@@ -181,6 +181,38 @@ export function decodeSnitchData(data: Hex): SnitchAttestationData {
 const EMPTY_UID: Hex = `0x${'0'.repeat(64)}`;
 
 /**
+ * Memastikan wallet attester sanggup membayar transaksi INI, sebelum dikirim.
+ *
+ * Tanpa ini, wallet yang kehabisan dana menghasilkan error RPC yang tidak
+ * memberi tahu apa pun yang bisa ditindaklanjuti ("insufficient funds for
+ * gas * price + value"), dan pada alur demo ia muncul sebagai verifikasi
+ * berstatus `failed` yang misterius. Saldo adalah hal paling gampang habis di
+ * proyek ini karena test memang mengirim transaksi sungguhan tiap kali jalan.
+ */
+async function assertAttesterFunded(
+  publicClient: ReturnType<typeof getPublicClient>,
+  address: Hex,
+  estimatedGas: bigint | undefined,
+): Promise<void> {
+  const balance = await publicClient.getBalance({ address });
+  const gasPrice = await publicClient.getGasPrice();
+  const needed = (estimatedGas ?? 0n) * gasPrice;
+
+  if (balance > 0n && (needed === 0n || balance >= needed)) return;
+
+  const { chainId } = getChainConfig();
+  const topUp =
+    chainId === 84532
+      ? 'Ambil ETH testnet gratis di https://portal.cdp.coinbase.com/products/faucet (Base Sepolia).'
+      : 'Danai wallet ini sebelum menerbitkan attestation.';
+
+  throw new Error(
+    `Wallet attester ${address} tidak cukup dana: saldo ${balance} wei, ` +
+      `perkiraan biaya ${needed} wei (gas ${estimatedGas ?? 0n} × ${gasPrice} wei). ${topUp}`,
+  );
+}
+
+/**
  * `getBlock(blockNumber)` kadang menjawab "not found" tepat setelah
  * `waitForTransactionReceipt` sukses — RPC load-balanced Base Sepolia bisa
  * melayani node yang belum mengejar blok itu. Retry singkat dengan backoff,
@@ -262,6 +294,8 @@ export async function issueAttestation(
     functionName: 'attest',
     args: attestArgs,
   });
+
+  await assertAttesterFunded(publicClient, account.address, request.gas);
 
   const txHash = await walletClient.writeContract(request);
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -386,6 +420,8 @@ export async function revokeAttestation(uid: Hex): Promise<RevokeResult> {
       },
     ],
   });
+
+  await assertAttesterFunded(publicClient, account.address, request.gas);
 
   const txHash = await walletClient.writeContract(request);
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
