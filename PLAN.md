@@ -374,7 +374,15 @@ Lainnya: `bundleHash` tak bergantung urutan item tapi bergantung `evidenceAsOf` 
 - Validasi sitasi: id palsu → ulang sekali dengan daftar id sah → masih gagal → `INCONCLUSIVE` + summary yang menyebut kegagalannya. Tidak pernah menyaring finding diam-diam.
 - **Diperbaiki setelah uji nyata:** agen menyebut radius sourcing 50 km sebagai "petak" — melanggar §3.4. Prompt sekarang menyatakan arti geometri secara eksplisit; keluaran berubah jadi *"risiko sourcing … BUKAN bukti bahwa pabrik yang menebang"*.
 
-⚠️ **Gap terbuka:** cross-check RSPO dikirim sebagai konteks, bukan butir bukti ber-`evidenceId`, jadi validator R5 menolaknya jadi finding formal — agen hanya bisa menyebutnya di summary. Perbaikan: `EvidenceKind` baru `'certification'` yang mengambil ulang kedua record ArcGIS saat verifikasi agar punya `rawHash` sendiri. **Belum dikerjakan.**
+✅ **Gap sitasi RSPO — DITUTUP 2026-08-04** — `lib/evidence/certification.ts`, 10 test hijau
+
+Cross-check RSPO dulu dikirim sebagai konteks, jadi agen bisa *melihat* ketidaksepakatan tapi tidak bisa *menyitirnya* — validator R5 menolak finding tanpa `evidenceId`. Agen sendiri menuliskannya di uji nyata: *"tidak ada evidenceId dalam bundle untuk klaim ini sehingga tidak dapat disitir sebagai finding formal"*.
+
+Sekarang `EvidenceKind` punya varian `'certification'`. Query **per pabrik**, bukan dataset penuh: hash 2 MB dataset lengkap tidak membuktikan apa pun tentang satu pabrik, dan berubah tiap kali pabrik lain yang tak berhubungan ikut diperbarui. Pencocokan sisi Unilever memakai aturan yang persis sama dengan `joinMills` — kalau bukti dan seed berbeda aturan, keduanya bisa menyimpulkan hal berlawanan tentang pabrik yang sama.
+
+Hasil verifikasi ulang WA HA: **7 butir bukti · FAIL · nol sitasi palsu · finding `[major]` menyitir `certification:RSPO:PO1000000234`** dengan kedua klaim disebut eksplisit.
+
+**Bug yang ketahuan gara-gara ini** (migrasi `0002`): `evidence_items` ber-primary-key `id` tunggal, padahal id bukti deterministik dari isinya. Verifikasi kedua atas petak yang sama ditolak senyap oleh `onConflictDoNothing`, dan bundle-nya terakit hanya berisi 1 dari 7 butir — tanpa error, tanpa log. Kunci primer kini `(verification_id, id)`.
 
 **B6 — Job runner + endpoint** ✅ **SELESAI 2026-08-04** — `lib/jobs/run-verification.ts`, `lib/db/repo.ts`, `lib/plots/intake.ts` (10 test hijau), `lib/api/respond.ts`, `app/api/**`
 
