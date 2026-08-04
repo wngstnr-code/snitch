@@ -109,18 +109,37 @@ function correctionSuffix(invalidIds: string[], validIds: readonly string[]): st
 }
 
 async function callModel(prompt: string): Promise<AgentAssessment> {
-  const { object } = await generateObject({
-    model: MODEL,
-    schema: AssessmentSchema,
-    schemaName: 'AgentAssessment',
-    schemaDescription:
-      'Penilaian kontradiksi kepatuhan EUDR: verdict, tingkat keyakinan, dan daftar non-conformance bersitasi.',
-    instructions: SYSTEM_PROMPT,
-    prompt,
-    temperature: 0,
-    abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
-  });
-  return object;
+  const startedAt = Date.now();
+  try {
+    const { object } = await generateObject({
+      model: MODEL,
+      schema: AssessmentSchema,
+      schemaName: 'AgentAssessment',
+      schemaDescription:
+        'Penilaian kontradiksi kepatuhan EUDR: verdict, tingkat keyakinan, dan daftar non-conformance bersitasi.',
+      instructions: SYSTEM_PROMPT,
+      prompt,
+      temperature: 0,
+      abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+    });
+    return object;
+  } catch (e) {
+    // `AbortSignal.timeout` melempar error yang pesannya kosong; kalau
+    // diteruskan apa adanya, reviewer melihat verifikasi berstatus `failed`
+    // dengan keterangan "{}" dan tidak punya cara tahu apa yang terjadi.
+    // Error yang tidak bisa dibaca sama tidak bergunanya dengan error yang
+    // ditelan (§9).
+    const elapsedS = ((Date.now() - startedAt) / 1000).toFixed(1);
+    const name = e instanceof Error ? e.name : '';
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      throw new Error(
+        `Model tidak menjawab dalam ${MODEL_TIMEOUT_MS / 1000} detik (berhenti pada ${elapsedS} s). ` +
+          'Penilaian tidak dilakukan — ini kegagalan memeriksa, bukan hasil bersih. Coba jalankan ulang.',
+      );
+    }
+    const detail = e instanceof Error && e.message ? e.message : String(e);
+    throw new Error(`Panggilan model gagal setelah ${elapsedS} s: ${detail}`);
+  }
 }
 
 /**
