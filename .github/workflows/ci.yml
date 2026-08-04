@@ -38,18 +38,20 @@ jobs:
       - name: Pasang dependensi
         run: npm ci
 
+      # Build sengaja dijalankan TANPA satu pun rahasia. Itu bukan kelalaian —
+      # itu yang diuji. Kalau build mulai menuntut DATABASE_URL atau kunci
+      # attester lagi, berarti ada modul yang kembali membuat koneksi saat
+      # dimuat, dan step ini gagal di sini alih-alih saat deploy.
+      # Build dijalankan LEBIH DULU agar Next.js men-generate tipe RouteContext
+      # di dalam folder .next/types sebelum tsc dijalankan.
+      - name: Build tanpa rahasia
+        run: npm run build
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
-
-      # Build sengaja dijalankan TANPA satu pun rahasia. Itu bukan kelalaian —
-      # itu yang diuji. Kalau build mulai menuntut DATABASE_URL atau kunci
-      # attester lagi, berarti ada modul yang kembali membuat koneksi saat
-      # dimuat, dan step ini gagal di sini alih-alih saat deploy.
-      - name: Build tanpa rahasia
-        run: npm run build
 
       # §0 adalah aturan yang membuat tim ini pernah gagal lolos. Menegakkannya
       # lewat kebiasaan saja tidak cukup pada jam ke-30 hackathon.
