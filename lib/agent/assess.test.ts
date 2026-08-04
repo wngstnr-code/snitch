@@ -4,7 +4,7 @@
  * Memakai bundle bukti NYATA (bukan mock, CLAUDE.md §0): dirakit lewat
  * `collectEvidence` dari B4 (GFW tile nyata + GLEIF nyata + kedua daftar sanksi
  * nyata dari Postgres), lalu benar-benar dipanggilkan ke model lewat AI Gateway
- * (`generateObject`, `google/gemini-1.5-flash`, temperature 0). Tidak ada
+ * (`generateObject`, `google/gemini-2.5-flash`, temperature 0). Tidak ada
  * mock — fungsi ini memanggil Google langsung.
  * test ini GAGAL dengan pesan error dari `generateObject`, bukan diam-diam
  * di-skip.
@@ -90,7 +90,7 @@ test('assessBundle: bundle nyata (deforestasi + GLEIF + sanksi) menghasilkan pen
   assert.ok(check.valid, `sitasi tak sah ditemukan: ${JSON.stringify(check.invalidIds)}`);
 
   assertAssessmentShape(result.assessment, validIds);
-  assert.equal(result.model, 'google/gemini-1.5-flash');
+  assert.equal(result.model, 'google/gemini-2.5-flash');
   assert.ok(!Number.isNaN(Date.parse(result.assessedAt)));
 
   t.diagnostic(

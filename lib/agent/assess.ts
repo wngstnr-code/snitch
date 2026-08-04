@@ -55,8 +55,8 @@ export interface AssessResult {
   assessedAt: string;
 }
 
-const MODEL = google('gemini-1.5-flash');
-const MODEL_NAME_FOR_LOGS = 'google/gemini-1.5-flash';
+const MODEL = google('gemini-2.5-flash');
+const MODEL_NAME_FOR_LOGS = 'google/gemini-2.5-flash';
 const MODEL_TIMEOUT_MS = 120_000;
 
 // Mencerminkan `Finding` di lib/types.ts persis (severity/claim/contradiction/evidenceIds).
