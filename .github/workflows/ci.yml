@@ -1,0 +1,84 @@
+name: CI
+
+# Yang SENGAJA tidak dijalankan di sini: `npm test`.
+#
+# Seluruh test di repo ini menyentuh sumber sungguhan — tile GFW, GLEIF, daftar
+# sanksi pemerintah, dan Base Sepolia. Yang terakhir mengirim transaksi nyata,
+# jadi menjalankannya pada tiap push berarti membakar saldo faucet dan
+# menerbitkan attestation sampah di chain pada tiap commit. Itu bukan CI, itu
+# vandalisme terjadwal.
+#
+# Mengubahnya jadi test yang aman untuk CI berarti memberinya mock — dan itu
+# dilarang §0, justru aturan yang membuat test ini berharga. Jadi CI menjaga
+# hal-hal yang bisa dijaga tanpa jaringan (tipe, lint, build, aturan §0), dan
+# `npm test` tetap dijalankan manusia sebelum demo.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Pasang dependensi
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Build sengaja dijalankan TANPA satu pun rahasia. Itu bukan kelalaian —
+      # itu yang diuji. Kalau build mulai menuntut DATABASE_URL atau kunci
+      # attester lagi, berarti ada modul yang kembali membuat koneksi saat
+      # dimuat, dan step ini gagal di sini alih-alih saat deploy.
+      - name: Build tanpa rahasia
+        run: npm run build
+
+      # §0 adalah aturan yang membuat tim ini pernah gagal lolos. Menegakkannya
+      # lewat kebiasaan saja tidak cukup pada jam ke-30 hackathon.
+      - name: Tegakkan aturan §0 dan konvensi §9
+        run: |
+          set -uo pipefail
+          pola='(const|let|var) +[A-Za-z_]*(MOCK|Mock|DUMMY|Dummy|FAKE|Fake)[A-Za-z_]*|TODO:|FIXME|@ts-ignore|: *any\b'
+          if grep -rnE --include='*.ts' --include='*.tsx' "${pola}" lib app scripts components; then
+            echo "::error::Ditemukan mock/placeholder/TODO/any — lihat CLAUDE.md §0 dan §9."
+            exit 1
+          fi
+          echo "Bersih: tanpa mock, tanpa placeholder, tanpa any."
+
+      # Setiap variabel baru wajib punya placeholder di .env.example pada commit
+      # yang sama (§9). Yang paling sering terjadi adalah lupa, lalu orang
+      # berikutnya menghabiskan sejam mengejar env yang tidak pernah disebutkan.
+      - name: Semua env yang dibaca kode ada di .env.example
+        run: |
+          set -uo pipefail
+          hilang=0
+          for k in $(grep -rhoE --include='*.ts' 'process\.env\.[A-Z_][A-Z0-9_]*' lib app scripts \
+                     | sed 's/process\.env\.//' | sort -u); do
+            case "$k" in
+              NODE_ENV|VERCEL) continue ;;
+            esac
+            if ! grep -qE "^${k}=" .env.example; then
+              echo "::error::${k} dibaca kode tapi tidak ada di .env.example"
+              hilang=1
+            fi
+          done
+          [ "$hilang" -eq 0 ] && echo "Semua env terdokumentasi di .env.example."
+          exit "$hilang"
