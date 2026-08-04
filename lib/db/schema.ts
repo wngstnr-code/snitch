@@ -3,6 +3,7 @@
  * `lib/types.ts` — kalau bentuk DB dan bentuk API menyimpang, integrasi pecah.
  */
 
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   doublePrecision,
@@ -191,6 +192,22 @@ export const attestations = pgTable(
   },
   (t) => [
     index('attestations_verification_idx').on(t.verificationId),
+    /**
+     * Satu verifikasi = paling banyak satu attestation AKTIF.
+     *
+     * Endpoint attest sudah menolak verifikasi yang punya attestation, tapi
+     * pemeriksaan itu terjadi sebelum transaksi onchain yang makan puluhan
+     * detik — dua permintaan bersamaan sama-sama lolos dan menerbitkan dua
+     * attestation untuk bukti yang sama. Batasan di DB membuat balapan itu
+     * mustahil, bukan sekadar tidak mungkin secara kebetulan.
+     *
+     * Parsial, hanya atas baris yang belum dicabut: attestation yang sudah
+     * ter-revoke adalah peristiwa onchain yang benar-benar terjadi, dan
+     * riwayatnya tidak boleh dipaksa hilang demi memenuhi sebuah batasan.
+     */
+    uniqueIndex('attestations_active_verification_uq')
+      .on(t.verificationId)
+      .where(sql`${t.revoked} = false`),
     index('attestations_revoked_idx').on(t.revoked),
   ],
 );

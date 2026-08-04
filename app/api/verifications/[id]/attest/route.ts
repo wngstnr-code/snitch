@@ -79,6 +79,18 @@ export async function POST(
     const lei =
       legalEntity && legalEntity.kind === 'legal_entity' ? (legalEntity.lei ?? '') : '';
 
+    // `confidence` onchain adalah keyakinan AGEN atas penilaiannya sendiri.
+    // Kalau manusia menimpa verdict itu, angka tersebut tidak lagi mengukur
+    // verdict yang tertulis — dan schema tidak punya field untuk menyatakannya.
+    // Maka override dinyatakan di `reviewedBy`, satu-satunya field teks yang
+    // memang milik manusia. Tanpa ini, pembaca onchain melihat verdict PASS
+    // ber-"confidence 85" tanpa cara apa pun mengetahui bahwa 85 itu adalah
+    // keyakinan mesin pada FAIL.
+    const reviewedBy =
+      v.review.decision === 'override' && v.review.overrideVerdict
+        ? `${v.review.reviewedBy} (override manusia: ${v.assessment.verdict}→${v.review.overrideVerdict}; confidence adalah keyakinan agen pada ${v.assessment.verdict})`
+        : v.review.reviewedBy;
+
     const result = await issueAttestation({
       plotId: v.plot.id,
       plotGeohash: v.plot.geohash,
@@ -87,7 +99,7 @@ export async function POST(
       verdict,
       confidence: v.assessment.confidence,
       evidenceAsOf: v.bundle.evidenceAsOf,
-      reviewedBy: v.review.reviewedBy,
+      reviewedBy,
       legalEntityLEI: lei,
     });
 

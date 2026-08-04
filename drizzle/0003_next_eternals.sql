@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "attestations_active_verification_uq" ON "attestations" USING btree ("verification_id") WHERE "attestations"."revoked" = false;

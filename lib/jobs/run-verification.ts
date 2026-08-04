@@ -18,7 +18,12 @@
  * palsu (CLAUDE.md §9, R10).
  */
 
-import { collectEvidence, prepareBundle, publishBundle } from '../evidence/bundle';
+import {
+  collectEvidence,
+  prepareBundle,
+  publishBundle,
+  verifyPublishedBundle,
+} from '../evidence/bundle';
 import { assessBundle, type AssessContext } from '../agent/assess';
 import {
   getVerificationRow,
@@ -136,6 +141,19 @@ export async function runVerification(id: string): Promise<RunResult> {
 
     // 2. Rakit, unggah, dan simpan hash yang nanti di-anchor onchain.
     const bundle = await publishBundle(prepareBundle(items, evidenceAsOf));
+
+    // Buktikan berkasnya benar-benar bisa diunduh dan hash-nya cocok SEBELUM
+    // hash itu ditulis ke chain. Anchor bersifat permanen; kalau unggahan
+    // rusak atau URL-nya tidak terjangkau publik, kita akan mengabadikan
+    // janji yang tidak bisa ditepati siapa pun — dan verifikator pihak ketiga
+    // yang menemukannya, bukan kita.
+    if (!(await verifyPublishedBundle(bundle))) {
+      throw new Error(
+        `Bundle ${bundle.bundleId} diunggah tapi hash hasil unduh ulang tidak cocok ` +
+          `(${bundle.blobUrl}). Menolak melanjutkan — hash ini akan di-anchor onchain.`,
+      );
+    }
+
     await saveBundle(id, bundle);
 
     // 3. Nilai. Agen hanya melihat bundle — tanpa akses jaringan (B5).
