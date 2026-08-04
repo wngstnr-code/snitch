@@ -217,6 +217,52 @@ function nz(v: string | null | undefined): string | null {
   return t === '' ? null : t;
 }
 
+// ---------- pemetaan fitur -> model (satu sumber kebenaran) ----------
+//
+// Dipakai baik oleh unduhan penuh (seed) maupun lookup tertarget satu pabrik
+// (bukti sertifikasi). Kalau dua jalur itu memetakan field-nya sendiri-sendiri,
+// cepat atau lambat keduanya akan menyimpang.
+
+function mapUnilever(f: z.infer<typeof unileverFeature>): UnileverMill | null {
+  const geom = f.geometry;
+  const name = nz(f.properties.Mill_Name);
+  if (!geom || !name) return null;
+  const [lon, lat] = geom.coordinates;
+  return {
+    name,
+    parentCompany: nz(f.properties.Parent_Company),
+    rspoCertified: toRspoBoolean(f.properties.RSPO_Certified),
+    country: nz(f.properties.Country),
+    province: nz(f.properties.Province),
+    district: nz(f.properties.District),
+    lat,
+    lon,
+  };
+}
+
+function mapUml(f: z.infer<typeof umlFeature>): UmlMill | null {
+  const geom = f.geometry;
+  const umlId = nz(f.properties.UML_ID);
+  const name = nz(f.properties.Mill_Name);
+  if (!geom || !umlId || !name) return null;
+  // Field Latitude/Longitude kadang beda dari geometry pada dataset ArcGIS
+  // hasil re-upload; percayai geometry karena itulah yang dipakai peta.
+  const [lon, lat] = geom.coordinates;
+  return {
+    umlId,
+    name,
+    parentCompany: nz(f.properties.Parent_Com),
+    groupName: nz(f.properties.Group_Name),
+    rspoStatus: nz(f.properties.RSPO_Statu),
+    rspoCertified: umlRspoBoolean(f.properties.RSPO_Statu),
+    rspoType: nz(f.properties.RSPO_Type),
+    country: nz(f.properties.Country),
+    locationConfidence: nz(f.properties.Confidence),
+    lat,
+    lon,
+  };
+}
+
 // ---------- konektor A: Unilever ----------
 
 export async function fetchUnileverMills(): Promise<{
@@ -235,20 +281,8 @@ export async function fetchUnileverMills(): Promise<{
 
   const mills: UnileverMill[] = [];
   for (const f of rawFeatures) {
-    const geom = f.geometry;
-    const name = nz(f.properties.Mill_Name);
-    if (!geom || !name) continue;
-    const [lon, lat] = geom.coordinates;
-    mills.push({
-      name,
-      parentCompany: nz(f.properties.Parent_Company),
-      rspoCertified: toRspoBoolean(f.properties.RSPO_Certified),
-      country: nz(f.properties.Country),
-      province: nz(f.properties.Province),
-      district: nz(f.properties.District),
-      lat,
-      lon,
-    });
+    const m = mapUnilever(f);
+    if (m) mills.push(m);
   }
   if (mills.length === 0) {
     throw new Error('Unilever Palm Oil Mills terunduh tapi nol fitur terparse.');
@@ -274,31 +308,129 @@ export async function fetchUniversalMillList(): Promise<{
 
   const mills: UmlMill[] = [];
   for (const f of rawFeatures) {
-    const geom = f.geometry;
-    const umlId = nz(f.properties.UML_ID);
-    const name = nz(f.properties.Mill_Name);
-    if (!geom || !umlId || !name) continue;
-    // Latitude/Longitude field kadang beda dari geometry pada dataset ArcGIS
-    // hasil re-upload; percayai geometry karena itulah yang dipakai peta.
-    const [lon, lat] = geom.coordinates;
-    mills.push({
-      umlId,
-      name,
-      parentCompany: nz(f.properties.Parent_Com),
-      groupName: nz(f.properties.Group_Name),
-      rspoStatus: nz(f.properties.RSPO_Statu),
-      rspoCertified: umlRspoBoolean(f.properties.RSPO_Statu),
-      rspoType: nz(f.properties.RSPO_Type),
-      country: nz(f.properties.Country),
-      locationConfidence: nz(f.properties.Confidence),
-      lat,
-      lon,
-    });
+    const m = mapUml(f);
+    if (m) mills.push(m);
   }
   if (mills.length === 0) {
     throw new Error('Universal Mill List terunduh tapi nol fitur terparse.');
   }
   return { mills, sourceUrl: UML_URL, fetchedAt };
+}
+
+// ---------- lookup tertarget satu pabrik (untuk bukti sertifikasi) ----------
+//
+// Seed mengunduh seluruh dataset; bukti TIDAK boleh. Sebuah butir bukti wajib
+// membawa `rawHash` atas respons yang benar-benar dipakai memutuskan, dan
+// hash 2 MB dataset penuh tidak membuktikan apa pun tentang satu pabrik.
+// Maka: query per pabrik, hash respons per pabrik.
+
+/** Respons mentah dipertahankan — itulah yang di-hash, bukan hasil parse. */
+export interface TargetedLookup<T> {
+  mill: T | null;
+  url: string;
+  raw: string;
+  fetchedAt: string;
+}
+
+async function fetchTextWithRetry(url: string): Promise<string> {
+  let lastError = '';
+  for (let attempt = 1; attempt <= FETCH_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'user-agent': 'snitch/0.1 (+https://github.com/wngstnr-code/snitch)' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (res.ok) return await res.text();
+      lastError = `HTTP ${res.status}`;
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) break;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+    if (attempt < FETCH_RETRIES) {
+      await new Promise((r) => setTimeout(r, attempt * 750));
+    }
+  }
+  throw new Error(`Gagal mengambil ${url} setelah ${FETCH_RETRIES} percobaan (${lastError}).`);
+}
+
+/** `mill: null` berarti UML_ID itu memang tidak ada — bukan kegagalan jaringan. */
+export async function lookupUmlById(umlId: string): Promise<TargetedLookup<UmlMill>> {
+  if (!/^[A-Za-z0-9_-]+$/.test(umlId)) {
+    throw new Error(`UML_ID tidak wajar: ${JSON.stringify(umlId)}`);
+  }
+  const url =
+    `${UML_URL}?where=${encodeURIComponent(`UML_ID='${umlId}'`)}` +
+    `&outFields=*&f=geojson`;
+  const fetchedAt = new Date().toISOString();
+  const raw = await fetchTextWithRetry(url);
+  const parsed = umlResponse.parse(JSON.parse(raw));
+  const first = parsed.features[0];
+  return { mill: first ? mapUml(first) : null, url, raw, fetchedAt };
+}
+
+/**
+ * Kotak pencarian ±0,05° ≈ ±5,5 km — sengaja lebih lebar dari ambang
+ * pencocokan 3 km, supaya kandidat yang sah tidak hilang karena kotaknya
+ * kesempitan. Penyaringan sesungguhnya tetap dilakukan nama + jarak.
+ */
+const ENVELOPE_DEG = 0.05;
+
+export interface UnileverNearResult extends TargetedLookup<UnileverMill> {
+  distanceKm: number | null;
+  nameSimilarity: number | null;
+  /** berapa pabrik ada di dalam kotak sebelum disaring nama + jarak */
+  candidates: number;
+}
+
+/**
+ * Cari padanan di dataset Unilever memakai aturan pencocokan yang PERSIS SAMA
+ * dengan `joinMills` (nama ternormalisasi ≥ 0,8 dan jarak ≤ 3 km). Kalau bukti
+ * dan seed memakai aturan berbeda, keduanya bisa menyimpulkan hal berlawanan
+ * tentang pabrik yang sama.
+ */
+export async function lookupUnileverNear(
+  lat: number,
+  lon: number,
+  name: string,
+): Promise<UnileverNearResult> {
+  const envelope = [
+    lon - ENVELOPE_DEG,
+    lat - ENVELOPE_DEG,
+    lon + ENVELOPE_DEG,
+    lat + ENVELOPE_DEG,
+  ].join(',');
+  const url =
+    `${UNILEVER_MILLS_URL}?where=1%3D1&geometry=${encodeURIComponent(envelope)}` +
+    `&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects` +
+    `&outFields=*&f=geojson`;
+
+  const fetchedAt = new Date().toISOString();
+  const raw = await fetchTextWithRetry(url);
+  const parsed = unileverResponse.parse(JSON.parse(raw));
+
+  const target = normalizeName(name);
+  let best: { mill: UnileverMill; sim: number; dist: number } | null = null;
+  for (const f of parsed.features) {
+    const m = mapUnilever(f);
+    if (!m) continue;
+    const sim = nameSimilarity(target, normalizeName(m.name));
+    if (sim < NAME_SIMILARITY_THRESHOLD) continue;
+    const dist = distanceKm(lat, lon, m.lat, m.lon);
+    if (dist > MAX_MATCH_DISTANCE_KM) continue;
+    if (!best || sim > best.sim || (sim === best.sim && dist < best.dist)) {
+      best = { mill: m, sim, dist };
+    }
+  }
+
+  return {
+    mill: best?.mill ?? null,
+    url,
+    raw,
+    fetchedAt,
+    distanceKm: best ? Number(best.dist.toFixed(3)) : null,
+    nameSimilarity: best ? Number(best.sim.toFixed(3)) : null,
+    candidates: parsed.features.length,
+  };
 }
 
 // ---------- join ----------

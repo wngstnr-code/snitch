@@ -9,7 +9,11 @@
 
 // ---------- Evidence ----------
 
-export type EvidenceKind = 'deforestation' | 'legal_entity' | 'sanctions';
+export type EvidenceKind =
+  | 'deforestation'
+  | 'legal_entity'
+  | 'sanctions'
+  | 'certification';
 
 export interface EvidenceBase {
   /** stabil, disitir oleh agen */
@@ -71,10 +75,47 @@ export interface SanctionsEvidence extends EvidenceBase {
   matches: Array<{ name: string; list: string; score: number; entryId: string }>;
 }
 
+/** Satu klaim sertifikasi dari satu dataset. */
+export interface CertificationClaim {
+  /** nama dataset yang mengklaim, mis. 'Universal Mill List' */
+  dataset: string;
+  sourceUrl: string;
+  /** teks apa adanya dari dataset; null bila record tidak ditemukan di sana */
+  raw: string | null;
+  /**
+   * null = TIDAK DIKETAHUI. Jangan pernah ditafsirkan sebagai "tidak
+   * tersertifikasi" — itu tuduhan, bukan kesimpulan.
+   */
+  certified: boolean | null;
+}
+
+/**
+ * Cross-check sertifikasi dari dua dataset independen (CLAUDE.md §3.4c).
+ *
+ * Ini bukti adversarial: nilainya justru muncul saat dua sumber yang tidak
+ * saling mengendalikan TIDAK sepakat. Karena ia bukti ber-`id`, agen bisa
+ * menyitirnya — tanpa itu ketidaksepakatan hanya jadi catatan yang ditolak
+ * validator sitasi (R5).
+ */
+export interface CertificationEvidence extends EvidenceBase {
+  kind: 'certification';
+  scheme: 'RSPO';
+  millName: string;
+  millUmlId: string | null;
+  /** model rantai pasok, mis. 'MB' (Mass Balance) / 'IP' (Identity Preserved) */
+  supplyChainType: string | null;
+  claims: CertificationClaim[];
+  /** true HANYA bila dua sumber sama-sama tegas dan saling bertentangan */
+  disagreement: boolean;
+  /** jarak antar-record yang dicocokkan; null bila hanya satu sumber punya data */
+  matchDistanceKm: number | null;
+}
+
 export type Evidence =
   | DeforestationEvidence
   | LegalEntityEvidence
-  | SanctionsEvidence;
+  | SanctionsEvidence
+  | CertificationEvidence;
 
 export interface EvidenceBundle {
   bundleId: string;

@@ -56,10 +56,16 @@ ATURAN KERAS — PELANGGARAN MEMBUAT OUTPUTMU DITOLAK OTOMATIS:
    untuk direview manusia, BUKAN vonis "tersanksi". Bedakan bahasanya: skor
    tinggi (>=0,85) boleh disebut "kemungkinan match kuat"; skor rendah harus
    disebut "kandidat, perlu review manusia".
-8. Klaim sertifikasi RSPO datang dari DUA dataset independen (Universal Mill List
-   dan Unilever Palm Oil Mills). Kalau keduanya BERTENTANGAN soal status RSPO
-   pabrik yang sama, itu non-conformance nyata — sebutkan kedua sumbernya secara
-   eksplisit di "claim" dan "contradiction".
+8. Bukti berjenis "certification" mengadu DUA dataset independen (Universal Mill
+   List dan Unilever Palm Oil Mills) soal status RSPO pabrik yang sama.
+   Field "disagreement": true berarti keduanya sama-sama tegas dan saling
+   bertentangan — itu non-conformance nyata dan HARUS jadi finding tersendiri
+   yang menyitir evidenceId bukti certification itu, dengan kedua klaimnya
+   disebut eksplisit.
+   Field "certified": null di salah satu sisi berarti TIDAK DIKETAHUI, bukan
+   "tidak tersertifikasi" — jangan pernah menuduh berdasarkan ketiadaan data.
+   Ketidaksepakatan ini TIDAK menyatakan siapa yang benar; nilainya justru
+   karena ia muncul tanpa perlu mempercayai pihak mana pun.
 9. Kamu BUKAN badan sertifikasi dan hasilmu BUKAN EUDR Due Diligence Statement
    resmi. Jangan menulis seolah kamu punya kewenangan hukum untuk memutuskan
    kepatuhan — gunakan bahasa "indikasi", "belum terverifikasi", "kontradiksi
@@ -123,6 +129,7 @@ function summarizeEvidenceItem(item: Evidence): Record<string, unknown> {
     }
     case 'legal_entity':
     case 'sanctions':
+    case 'certification':
       // Kecil, kirim seluruh field apa adanya.
       return { ...item };
   }
@@ -171,13 +178,14 @@ export function buildUserPrompt({ bundle, ctx }: BuildPromptInput): string {
     `# Operator/importir EU (kalau diketahui)`,
     ctx.euOperator ? fmt(ctx.euOperator) : 'TIDAK DIKETAHUI — tidak ada operator EU yang diinput untuk verifikasi ini.',
     ``,
-    `# Klaim sertifikasi pabrik (dua dataset independen, kalau ada)`,
-    // Klaim ini belum menjadi butir bukti ber-evidenceId, jadi ia tidak bisa
-    // disitir. Katakan itu terus terang ke model daripada membiarkannya
-    // menghasilkan finding yang lalu ditolak validator sitasi.
+    `# Klaim sertifikasi pabrik menurut seed dataset (konteks latar)`,
+    // Sejak ada bukti berjenis "certification", ketidaksepakatan RSPO SUDAH
+    // bisa disitir. Blok ini tinggal konteks latar dari saat seed; yang
+    // mengikat adalah butir bukti certification di bundle, karena hanya ia
+    // yang punya rawHash atas respons yang benar-benar dipakai memutuskan.
     ctx.millClaims
-      ? `${fmt(ctx.millClaims)}\nCATATAN: klaim ini BELUM punya evidenceId, jadi TIDAK BOLEH jadi finding formal. ` +
-        `Kalau kedua dataset bertentangan, sebutkan di "summary" sebagai hal yang perlu diverifikasi manual.`
+      ? `${fmt(ctx.millClaims)}\nCATATAN: ini nilai dari saat seed. Untuk finding formal, sitir butir bukti ` +
+        `berjenis "certification" di bundle — itulah yang membawa respons kedua dataset beserta hash-nya.`
       : 'TIDAK ADA — plot ini bukan pabrik dari dataset, atau klaim tidak tersedia.',
     ``,
     `# Batas bukti (evidenceAsOf)`,

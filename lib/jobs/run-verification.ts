@@ -77,6 +77,21 @@ function euOperatorOf(
   };
 }
 
+/**
+ * Pemicu cross-check sertifikasi. Koordinat seed dibawa sebagai cadangan supaya
+ * sisi Unilever tetap bisa dicari kalau UML_ID-nya sudah hilang dari dataset
+ * sejak seed terakhir — dataset publik memang berubah tanpa pemberitahuan.
+ */
+function millRefOf(p: PlotRow) {
+  if (p.source !== 'mill_dataset' || !p.millUmlId) return undefined;
+  return {
+    umlId: p.millUmlId,
+    fallbackName: p.name,
+    fallbackLat: p.lat ?? undefined,
+    fallbackLon: p.lon ?? undefined,
+  };
+}
+
 /** Klaim sertifikasi dua dataset — hanya ada untuk plot dari dataset pabrik. */
 function millClaimsOf(p: PlotRow): AssessContext['millClaims'] {
   if (p.source !== 'mill_dataset') return undefined;
@@ -114,6 +129,7 @@ export async function runVerification(id: string): Promise<RunResult> {
       plot: rowToPlot(p),
       euOperator: euOperatorOf(v),
       screenNames: screenNamesFor(v, p),
+      millRef: millRefOf(p),
       evidenceAsOf,
     });
     await saveEvidence(id, items);

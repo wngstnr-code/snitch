@@ -32,6 +32,7 @@ import {
   type CollectResult,
   type Geometry,
 } from './gfw';
+import { buildCertificationEvidence } from './certification';
 import { lookupLegalEntity } from './gleif';
 import { screenEntity } from './sanctions';
 
@@ -55,6 +56,17 @@ export interface CollectEvidenceInput {
   euOperator?: EuOperator;
   /** Nama-nama yang discreening ke daftar sanksi (operator, induk perusahaan). */
   screenNames: string[];
+  /**
+   * Pabrik dari dataset (§3.4c) — memicu cross-check sertifikasi RSPO antara
+   * dua dataset independen. Tidak diisi untuk petak hasil upload: pabrik punya
+   * klaim sertifikasi, petak lahan tidak.
+   */
+  millRef?: {
+    umlId: string;
+    fallbackName?: string;
+    fallbackLat?: number;
+    fallbackLon?: number;
+  };
   /** ISO. WAJIB — batas bukti, bukan `now()`. */
   evidenceAsOf: string;
 }
@@ -97,6 +109,13 @@ export async function collectEvidence(input: CollectEvidenceInput): Promise<Evid
   // 3. Sanksi — satu bukti per daftar, per nama.
   for (const name of input.screenNames) {
     items.push(...(await screenEntity(name)));
+  }
+
+  // 4. Sertifikasi — dua dataset independen diadu (§3.4c). Sengaja butir bukti
+  //    tersendiri supaya ketidaksepakatannya bisa DISITIR agen, bukan sekadar
+  //    dilihat.
+  if (input.millRef) {
+    items.push(await buildCertificationEvidence(input.millRef));
   }
 
   return items;
