@@ -27,11 +27,83 @@
  */
 
 const GFW_ORIGIN = 'https://tiles.globalforestwatch.org';
-const GFW_PATH = '/gfw_integrated_alerts/latest/default';
+const GFW_LATEST = '/gfw_integrated_alerts/latest/default';
 
 /** Skema URL yang dipakai sumber peta; dicegat oleh protokol di bawah. */
 export const GFW_PROTOCOL = 'gfwdecoded';
 export const GFW_TILE_URL = `${GFW_PROTOCOL}://tiles/{z}/{x}/{y}.png`;
+
+/**
+ * Bentuk URL tile yang sudah tuntas, diselesaikan sekali lalu dipakai semua.
+ *
+ * `latest` tidak menunjuk langsung ke berkasnya. Terukur 2026-08-05:
+ *
+ *   latest/default/…  →307→  v20260805/default/…
+ *                     →307→  v20260805/dynamic/…?implementation=default  →200
+ *
+ * Dua pengalihan itu TIDAK membawa header cache, sementara berkas tujuannya
+ * membawa `Cache-Control: max-age=31536000`. Jadi setiap tile membayar dua
+ * perjalanan bolak-balik yang tak boleh disimpan, hanya untuk sampai ke berkas
+ * yang sebenarnya boleh disimpan setahun — dan browser tidak pernah bisa
+ * melayani permintaan ulang sepenuhnya dari salinannya.
+ *
+ * Selisihnya bukan sedikit:
+ *
+ *   lewat `latest`  : 0,87 detik per tile
+ *   bentuk akhir    : 0,08 detik per tile
+ *
+ * Itulah kenapa lapisan alert terasa dimuat ulang dari nol setiap kali peta
+ * digeser jauh lalu kembali. Menyematkan versinya juga yang diminta
+ * CLAUDE.md §3.1: yang terlihat di layar harus dapat direproduksi, dan
+ * `latest` berubah tiap hari.
+ *
+ * Polanya TIDAK ditulis mati — ia dibaca dari `response.url` setelah seluruh
+ * pengalihan diikuti, jadi ia ikut menyesuaikan kalau GFW mengubah bentuknya.
+ */
+interface TileTemplate {
+  prefix: string;
+  suffix: string;
+}
+
+const FALLBACK: TileTemplate = {
+  prefix: `${GFW_ORIGIN}${GFW_LATEST}`,
+  suffix: '',
+};
+
+let templatePromise: Promise<TileTemplate> | null = null;
+
+async function tileTemplate(): Promise<TileTemplate> {
+  if (!templatePromise) {
+    templatePromise = (async () => {
+      try {
+        // Tile 0/0/0 hanya dipakai untuk membaca ke mana `latest` bermuara.
+        const probe = await fetch(`${GFW_ORIGIN}${GFW_LATEST}/0/0/0.png`, {
+          mode: 'cors',
+          signal: AbortSignal.timeout(TILE_TIMEOUT_MS),
+        });
+        const at = probe.url.indexOf('/0/0/0.png');
+        if (at > 0) {
+          return {
+            prefix: probe.url.slice(0, at),
+            suffix: probe.url.slice(at + '/0/0/0.png'.length),
+          };
+        }
+      } catch {
+        /* jatuh ke bentuk `latest` di bawah */
+      }
+      // Gagal menyelesaikan bukan alasan mematikan lapisan: `latest` tetap
+      // bekerja, hanya kehilangan manfaat penyimpanan browser.
+      return FALLBACK;
+    })();
+  }
+  return templatePromise;
+}
+
+/** Versi tile yang benar-benar dipakai — untuk ditampilkan bila perlu. */
+export async function gfwTileVersion(): Promise<string> {
+  const { prefix } = await tileTemplate();
+  return /(v\d{8})/.exec(prefix)?.[1] ?? 'latest';
+}
 
 /**
  * Warna per tingkat keyakinan, ditulis sebagai [r, g, b, a].
@@ -198,19 +270,23 @@ async function fetchTile(url: string, signal: AbortSignal): Promise<Response | n
  * piksel dengan `alpha == 0`, atau `R == 0 && G == 0`, berarti TIDAK ADA alert
  * (kanal R dan G menyimpan tanggal; nol berarti kosong, bukan 31-12-2014).
  */
-async function decodeTile(url: string, signal: AbortSignal): Promise<ImageBitmap> {
-  const cached = recall(url);
-  if (cached) return createImageBitmap(cached);
+async function decodeTile(path: string, signal: AbortSignal): Promise<ImageBitmap> {
+  let bytes = recall(path);
 
-  const res = await fetchTile(url, signal);
-  if (!res) {
-    // GFW tidak punya cakupan di sini, atau menolak berulang kali. Kembalikan
-    // tile kosong supaya peta tetap bisa dipakai, tapi catat kejadiannya.
-    noteUnavailable();
-    return createImageBitmap(blankTile());
+  if (!bytes) {
+    const { prefix, suffix } = await tileTemplate();
+    const res = await fetchTile(`${prefix}${path}${suffix}`, signal);
+    if (!res) {
+      // GFW tidak punya cakupan di sini, atau menolak berulang kali. Kembalikan
+      // tile kosong supaya peta tetap bisa dipakai, tapi catat kejadiannya.
+      noteUnavailable();
+      return createImageBitmap(blankTile());
+    }
+    bytes = await res.arrayBuffer();
+    remember(path, bytes);
   }
 
-  const source = await createImageBitmap(await res.blob());
+  const source = await createImageBitmap(new Blob([bytes]));
   // Ukurannya WAJIB disalin sebelum `close()`: setelah ditutup, `width` dan
   // `height` sebuah ImageBitmap menjadi 0, dan `getImageData` gagal dengan
   // "The source width is 0".
@@ -242,7 +318,6 @@ async function decodeTile(url: string, signal: AbortSignal): Promise<ImageBitmap
     px[i + 3] = na;
   }
 
-  remember(url, img);
   ctx.putImageData(img, 0, 0);
   return createImageBitmap(canvas);
 }
@@ -254,18 +329,26 @@ async function decodeTile(url: string, signal: AbortSignal): Promise<ImageBitmap
  * tile dari server GFW lalu mendekodenya lagi dari nol — terlihat sebagai
  * lapisan yang berkedip hilang-muncul saat peta digeser bolak-balik.
  *
- * Yang disimpan adalah `ImageData` hasil olahan, bukan `ImageBitmap`: MapLibre
- * menutup bitmap yang sudah diunggah ke GPU, sehingga bitmap yang disimpan
- * akan tidak terpakai. Dari ImageData, bitmap baru dibuat dalam hitungan
- * mikrodetik — yang mahal (jaringan dan perulangan piksel) sudah dilewati.
+ * Yang disimpan adalah BYTE PNG mentah dari GFW, bukan `ImageData` hasil
+ * olahan maupun `ImageBitmap`. Alasannya dua:
  *
- * 256x256x4 bait = 262 KB per tile; batas 120 tile menahan pemakaian di
- * sekitar 31 MB.
+ *  - MapLibre menutup bitmap yang sudah diunggah ke GPU, jadi bitmap yang
+ *    disimpan akan tidak terpakai.
+ *  - `ImageData` memakan 256x256x4 = 262 KB per tile, sedangkan byte PNG-nya
+ *    hanya sekitar 50 KB. Untuk anggaran memori yang sama, byte mentah memuat
+ *    lima kali lebih banyak tile — dan menggeser peta lintas benua memang
+ *    menyentuh ratusan tile, cukup untuk membuang isi simpanan yang kecil.
+ *
+ * Yang mahal adalah jaringan (terukur ~0,8 detik per tile), bukan perulangan
+ * pikselnya (beberapa milidetik). Jadi mengulang dekode dari byte yang sudah
+ * ada praktis gratis.
+ *
+ * 400 tile x ~50 KB menahan pemakaian di sekitar 20 MB.
  */
-const MAX_CACHED_TILES = 120;
-const cache = new Map<string, ImageData>();
+const MAX_CACHED_TILES = 400;
+const cache = new Map<string, ArrayBuffer>();
 
-function remember(key: string, data: ImageData): void {
+function remember(key: string, data: ArrayBuffer): void {
   cache.set(key, data);
   while (cache.size > MAX_CACHED_TILES) {
     const oldest = cache.keys().next().value;
@@ -274,7 +357,7 @@ function remember(key: string, data: ImageData): void {
   }
 }
 
-function recall(key: string): ImageData | undefined {
+function recall(key: string): ArrayBuffer | undefined {
   const hit = cache.get(key);
   if (!hit) return undefined;
   // Disentuh ulang supaya jadi yang paling baru dipakai.
@@ -304,10 +387,6 @@ export function registerGfwProtocol(
   addProtocol(GFW_PROTOCOL, async (params, abortController) => {
     // `gfwdecoded://tiles/12/3202/2042.png` → `/12/3202/2042.png`
     const path = params.url.slice(`${GFW_PROTOCOL}://tiles`.length);
-    const data = await decodeTile(
-      `${GFW_ORIGIN}${GFW_PATH}${path}`,
-      abortController.signal,
-    );
-    return { data };
+    return { data: await decodeTile(path, abortController.signal) };
   });
 }
