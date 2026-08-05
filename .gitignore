@@ -26,6 +26,13 @@ next-env.d.ts
 .agents/
 skills-lock.json
 
+# dokumen internal — hanya README yang ikut ke repo publik.
+# Berkasnya TETAP ADA di komputer masing-masing dan tetap tersimpan di riwayat
+# git; ini hanya menghentikannya ikut ter-commit. Untuk mengembalikan:
+#     git checkout <commit-sebelum-ini> -- CLAUDE.md PLAN.md IDEA.md
+/*.md
+!/README.md
+
 # editor
 .vscode/
 .idea/
