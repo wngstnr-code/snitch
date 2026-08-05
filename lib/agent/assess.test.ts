@@ -90,7 +90,7 @@ test('assessBundle: bundle nyata (deforestasi + GLEIF + sanksi) menghasilkan pen
   assert.ok(check.valid, `sitasi tak sah ditemukan: ${JSON.stringify(check.invalidIds)}`);
 
   assertAssessmentShape(result.assessment, validIds);
-  assert.equal(result.model, 'google/gemini-2.5-flash');
+  assert.equal(result.model, 'google/gemini-3.6-flash');
   assert.ok(!Number.isNaN(Date.parse(result.assessedAt)));
 
   t.diagnostic(

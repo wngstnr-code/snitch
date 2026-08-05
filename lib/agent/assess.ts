@@ -56,8 +56,11 @@ export interface AssessResult {
   assessedAt: string;
 }
 
-const MODEL = google('gemini-2.5-flash');
-const MODEL_NAME_FOR_LOGS = 'google/gemini-2.5-flash';
+// gemini-2.5-flash ditolak Google untuk kunci API yang baru dibuat: "no longer
+// available to new users". Terverifikasi 2026-08-04 dengan panggilan langsung ke
+// generateContent — model lama gagal, gemini-3.6-flash menjawab normal.
+const MODEL = google('gemini-3.6-flash');
+const MODEL_NAME_FOR_LOGS = 'google/gemini-3.6-flash';
 const MODEL_TIMEOUT_MS = 120_000;
 
 // Mencerminkan `Finding` di lib/types.ts persis (severity/claim/contradiction/evidenceIds).
