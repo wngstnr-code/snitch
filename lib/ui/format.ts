@@ -103,3 +103,63 @@ export function formatMonth(ym: string): string {
 export function formatConfidence(n: number): string {
   return `${Math.round(n)}%`;
 }
+
+/**
+ * Luas polygon dalam hektare — salinan sengaja dari `areaHa()` di
+ * `lib/evidence/gfw.ts`.
+ *
+ * Kenapa disalin dan bukan diimpor: modul itu memuat `node:zlib` dan
+ * `node:crypto` untuk mendekode PNG, jadi tidak bisa masuk bundle browser.
+ * Rumusnya diambil baris per baris dan diuji menghasilkan angka yang sama
+ * dengan server pada geometri yang sama — kalau keduanya menyimpang, pengguna
+ * akan melihat satu luas sebelum mengirim dan luas berbeda sesudahnya.
+ *
+ * Dipakai hanya untuk pratinjau di layar. Angka yang masuk berkas bukti tetap
+ * dihitung server dari geometrinya sendiri.
+ */
+export function areaHaOf(geom: GeoJSON.Polygon | GeoJSON.MultiPolygon): number {
+  const R = 6_378_137;
+  const polys: GeoJSON.Position[][][] =
+    geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates;
+
+  let total = 0;
+  for (const poly of polys) {
+    poly.forEach((ring, idx) => {
+      let s = 0;
+      for (let i = 0; i < ring.length - 1; i++) {
+        const a = ring[i];
+        const b = ring[i + 1];
+        if (!a || !b) continue;
+        const [lon1, lat1] = a;
+        const [lon2, lat2] = b;
+        if (
+          typeof lon1 !== 'number' ||
+          typeof lat1 !== 'number' ||
+          typeof lon2 !== 'number' ||
+          typeof lat2 !== 'number'
+        ) {
+          continue;
+        }
+        s +=
+          (((lon2 - lon1) * Math.PI) / 180) *
+          (2 + Math.sin((lat1 * Math.PI) / 180) + Math.sin((lat2 * Math.PI) / 180));
+      }
+      const area = Math.abs((s * R * R) / 2);
+      total += idx === 0 ? area : -area;
+    });
+  }
+  return total / 10_000;
+}
+
+/**
+ * Radius lingkaran yang luasnya `ha`, dalam km — dibulatkan ke bilangan bulat.
+ *
+ * Dipakai melabeli radius sourcing pabrik. Angkanya DITURUNKAN dari geometri
+ * yang benar-benar dikirim server, bukan ditulis mati sebagai "50 km": kalau
+ * suatu saat seed memakai radius berbeda, label ini ikut berubah sendiri
+ * alih-alih diam-diam berbohong.
+ */
+export function radiusKmFromArea(ha: number): number {
+  const km2 = ha / 100;
+  return Math.round(Math.sqrt(km2 / Math.PI));
+}

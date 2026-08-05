@@ -151,10 +151,28 @@ const CONFIDENCE_FILL: Record<AlertConfidence, string> = {
 };
 
 function DeforestationBody({ e }: { e: DeforestationEvidence }) {
-  const total = CONFIDENCE_ORDER.reduce(
+  const graded = CONFIDENCE_ORDER.reduce(
     (s, k) => s + (e.summary.byConfidence[k] ?? 0),
     0,
   );
+
+  /**
+   * Alert yang tingkat keyakinannya TIDAK DIKETAHUI.
+   *
+   * Pengumpul bukti menghitung setiap alert ke `byMonth`, tapi hanya memasukkan
+   * ke `byConfidence` bila nilainya dikenali — nilai alpha di luar 4/8/24
+   * dikembalikan sebagai null dan tidak pernah ditebak (CLAUDE.md §3.1).
+   * Selisih kedua jumlah itu karena itu tepat sama dengan jumlah alert yang
+   * tak terverifikasi.
+   *
+   * PLAN.md A4 mewajibkan keadaan ini dirender sebagai "unverified", bukan
+   * angka. Tanpa baris ini alert tersebut hilang dari layar tanpa jejak, dan
+   * total di bawah tidak akan pernah menjumlah — kehilangan diam-diam persis
+   * jenis yang dilarang §0.
+   */
+  const counted = Object.values(e.summary.byMonth).reduce((s, n) => s + n, 0);
+  const unverified = Math.max(0, counted - graded);
+  const total = graded + unverified;
 
   return (
     <div>
@@ -198,6 +216,13 @@ function DeforestationBody({ e }: { e: DeforestationEvidence }) {
                 />
               );
             })}
+            {unverified > 0 ? (
+              <span
+                title={`Unverified: ${formatNumber(unverified)} pixels — the alpha value was outside the three known levels, so confidence is not guessed`}
+                className="h-full rounded-[1px] border border-dashed border-muted-foreground/70 bg-transparent"
+                style={{ width: `${(unverified / total) * 100}%` }}
+              />
+            ) : null}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
             {CONFIDENCE_ORDER.map((k) => {
@@ -217,7 +242,23 @@ function DeforestationBody({ e }: { e: DeforestationEvidence }) {
                 </span>
               );
             })}
+            {unverified > 0 ? (
+              <span className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+                <span
+                  aria-hidden
+                  className="size-2 rounded-[1px] border border-dashed border-muted-foreground/70"
+                />
+                <em>unverified</em> · {formatNumber(unverified)}
+              </span>
+            ) : null}
           </div>
+          {unverified > 0 ? (
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {formatNumber(unverified)} alert pixels carry an alpha value
+              outside the three known confidence levels. Their confidence is
+              reported as <strong>unverified</strong> rather than guessed.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

@@ -8,7 +8,12 @@ import { PlotMap } from '@/components/plot-map';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingLine } from '@/components/ui/states';
 import { Pill } from '@/components/ui/badge';
-import { formatArea, formatNumber } from '@/lib/ui/format';
+import {
+  areaHaOf,
+  formatArea,
+  formatNumber,
+  radiusKmFromArea,
+} from '@/lib/ui/format';
 
 /**
  * Intake petak.
@@ -33,6 +38,8 @@ interface UploadState {
   name: string;
   geojson: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   vertices: number;
+  /** Dihitung di sini agar luasnya terlihat SEBELUM dikirim (PLAN.md A2). */
+  areaHa: number;
 }
 
 export function IntakeForm() {
@@ -118,6 +125,7 @@ export function IntakeForm() {
           name: file.name,
           geojson: geom,
           vertices: countVertices(geom),
+          areaHa: areaHaOf(geom),
         });
         if (!plotName) setPlotName(file.name.replace(/\.(geo)?json$/i, ''));
       } catch (e) {
@@ -259,7 +267,9 @@ export function IntakeForm() {
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Pill tone="neutral">{formatArea(selected.areaHa)}</Pill>
-                    <Pill tone="hold">50 km sourcing radius</Pill>
+                    <Pill tone="hold">
+                      {radiusKmFromArea(selected.areaHa)} km sourcing radius
+                    </Pill>
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                     A mill is a point, not a plot. What gets analysed is the
@@ -294,13 +304,15 @@ export function IntakeForm() {
                     <p className="datum">{upload.name}</p>
                     <div className="mt-1.5 flex flex-wrap gap-2">
                       <Pill tone="chain">{upload.geojson.type}</Pill>
+                      <Pill tone="neutral">{formatArea(upload.areaHa)}</Pill>
                       <Pill tone="neutral">
                         {formatNumber(upload.vertices)} vertices
                       </Pill>
                     </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Area is recomputed by the server from the geometry itself,
-                      not read from a field in the file.
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Area is computed from the geometry itself, never read from
+                      a field in the file. The server recomputes it with the same
+                      formula before collecting any evidence.
                     </p>
                   </div>
                 ) : null}
@@ -534,7 +546,7 @@ function uploadAsPlot(u: UploadState | null): Plot | null {
     name: u.name,
     geojson: u.geojson,
     geohash: '',
-    areaHa: 0,
+    areaHa: u.areaHa,
     operatorName: '',
     source: 'upload',
   };
