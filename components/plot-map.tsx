@@ -5,6 +5,12 @@ import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { DeforestationAlert, Plot } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import {
+  GFW_LEGEND,
+  GFW_TILE_URL,
+  registerGfwProtocol,
+  subscribeTileIssues,
+} from '@/lib/ui/gfw-tiles';
 
 /**
  * Jendela instrumen.
@@ -13,16 +19,15 @@ import { cn } from '@/lib/utils';
  * memang citra satelit, bukan dokumen. Lapisannya, dari bawah ke atas:
  *
  *  1. Citra satelit Esri World Imagery (tanpa token)
- *  2. Batas petak / radius sourcing
- *  3. Titik pabrik atau titik alert hasil dekode
+ *  2. Alert deforestasi GFW, DIDEKODE ULANG di browser (lib/ui/gfw-tiles.ts)
+ *  3. Batas petak / radius sourcing
+ *  4. Titik pabrik atau titik alert hasil dekode server
  *
- * Tile alert GFW SENGAJA tidak dipasang sebagai lapisan raster biasa. Terukur
- * 2026-08-05: alpha-nya hanya bernilai 4/8/24 dari 255 karena channel itu
- * dipakai menyimpan tingkat keyakinan, bukan transparansi — dirender apa
- * adanya hasilnya 1,6-9% opasitas alias tak terlihat. Lebih buruk lagi,
- * sumbernya tidak pernah selesai memuat sehingga `isStyleLoaded()` tetap
- * false dan MapLibre berhenti memproses SELURUH sumber lain: titik pabrik
- * ikut hilang. Versi terdekode menyusul lewat protokol kustom.
+ * Lapisan alert tidak boleh dipasang sebagai raster biasa: alpha tile GFW
+ * hanya bernilai 4/8/24 dari 255 karena channel itu menyimpan tingkat
+ * keyakinan, bukan transparansi. Dirender apa adanya hasilnya 1,6-9% opasitas
+ * alias tak terlihat. Protokol kustom membacanya dengan aturan yang sama
+ * dengan server, lalu menggambar ulang dengan warna yang terbaca mata.
  *
  * Semua endpoint sudah diuji dengan panggilan nyata (HTTP 200) sebelum dipakai.
  */
@@ -73,6 +78,9 @@ export function PlotMap({
   }, [plots]);
 
   const [ready, setReady] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(true);
+  /** Tile alert yang ditolak GFW — dilaporkan, tidak disembunyikan (§0). */
+  const [missingTiles, setMissingTiles] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
 
   // ── inisialisasi peta ──
@@ -83,8 +91,14 @@ export function PlotMap({
     (async () => {
       try {
         // MapLibre v6 tidak lagi punya default export — hanya named export.
-        const { Map, NavigationControl, ScaleControl, getWorkerUrl, setWorkerUrl } =
-          await import('maplibre-gl');
+        const {
+          Map,
+          NavigationControl,
+          ScaleControl,
+          addProtocol,
+          getWorkerUrl,
+          setWorkerUrl,
+        } = await import('maplibre-gl');
         if (cancelled || !container.current) return;
 
         // MapLibre menebak lokasi worker-nya dari `import.meta.url` modulnya
@@ -95,6 +109,11 @@ export function PlotMap({
         // hanya `isStyleLoaded()` yang selamanya false.
         // Berkas worker disalin ke public/maplibre (lihat SOURCE.txt di sana).
         if (!getWorkerUrl()) setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+
+        // Protokol yang mendekode tile alert GFW jadi piksel yang terlihat.
+        registerGfwProtocol(
+          addProtocol as Parameters<typeof registerGfwProtocol>[0],
+        );
 
         const m = new Map({
           container: container.current,
@@ -115,10 +134,21 @@ export function PlotMap({
                 maxzoom: 18,
                 attribution: 'Esri, Maxar, Earthstar Geographics',
               },
+              gfw: {
+                type: 'raster',
+                tiles: [GFW_TILE_URL],
+                tileSize: 256,
+                // Tile asli tersedia sampai z12; di atas itu MapLibre
+                // memperbesar tile z12 alih-alih meminta yang tidak ada.
+                maxzoom: 12,
+                attribution:
+                  'Global Forest Watch integrated alerts (CC BY 4.0)',
+              },
             },
             layers: [
               { id: 'bg', type: 'background', paint: { 'background-color': '#0b1116' } },
               { id: 'imagery', type: 'raster', source: 'imagery' },
+              { id: 'gfw', type: 'raster', source: 'gfw' },
             ],
           },
         });
@@ -126,7 +156,12 @@ export function PlotMap({
         m.addControl(new NavigationControl({ showCompass: false }), 'top-right');
         m.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
 
-        m.on('load', () => {
+        // `style.load`, BUKAN `load`. `load` baru menyala setelah tile pertama
+        // selesai dirender, sehingga satu sumber raster yang gagal menyandera
+        // seluruh antarmuka di layar "loading map…" — persis yang terjadi saat
+        // dekoder tile alert sempat melempar. Sumber dan lapisan hanya butuh
+        // gayanya siap, bukan tilenya.
+        m.on('style.load', () => {
           if (cancelled) return;
 
           // sumber kosong dulu; diisi oleh effect di bawah
@@ -228,6 +263,16 @@ export function PlotMap({
       map.current = null;
     };
   }, []);
+
+  // ── kabar tile yang tidak tersedia ──
+  useEffect(() => subscribeTileIssues(setMissingTiles), []);
+
+  // ── lapisan alert bisa dimatikan ──
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready || !m.getLayer('gfw')) return;
+    m.setLayoutProperty('gfw', 'visibility', showAlerts ? 'visible' : 'none');
+  }, [showAlerts, ready]);
 
   // ── titik pabrik ──
   useEffect(() => {
@@ -337,7 +382,49 @@ export function PlotMap({
         <span className="pointer-events-auto rounded-sm bg-[#0b1116]/85 px-2 py-1 font-[family-name:var(--font-data)] text-[0.625rem] tracking-[0.1em] text-[#9fd4f5] uppercase">
           Satellite imagery
         </span>
+        <label className="pointer-events-auto flex cursor-pointer items-center gap-1.5 rounded-sm bg-[#0b1116]/85 px-2 py-1 text-[0.6875rem] text-[#dbe7ee]">
+          <input
+            type="checkbox"
+            checked={showAlerts}
+            onChange={(e) => setShowAlerts(e.target.checked)}
+            className="accent-[#F0347A]"
+          />
+          GFW alerts
+        </label>
       </div>
+
+      {showAlerts && missingTiles > 0 ? (
+        <div className="pointer-events-none absolute inset-x-0 top-10 flex justify-center px-2">
+          <p className="pointer-events-auto max-w-md rounded-sm border border-[#e0b25c]/60 bg-[#2a1f08]/90 px-2 py-1 text-[0.6875rem] leading-snug text-[#f0d9a8]">
+            {missingTiles} alert tile{missingTiles === 1 ? '' : 's'} could not be
+            loaded from Global Forest Watch. Those areas are blank because the
+            source refused, not because they are clear.
+          </p>
+        </div>
+      ) : null}
+
+      {showAlerts ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-3 gap-y-1 bg-gradient-to-t from-[#0b1116] to-transparent px-2 pt-6 pb-7">
+          <span className="font-[family-name:var(--font-data)] text-[0.625rem] tracking-[0.1em] text-[#9fd4f5] uppercase">
+            Alert confidence
+          </span>
+          {GFW_LEGEND.map((l) => (
+            <span
+              key={l.label}
+              className="flex items-center gap-1 text-[0.625rem] text-[#dbe7ee]"
+            >
+              <span
+                aria-hidden
+                className="size-2 rounded-[1px]"
+                style={{
+                  background: `rgba(${l.rgba[0]},${l.rgba[1]},${l.rgba[2]},${l.rgba[3] / 255})`,
+                }}
+              />
+              {l.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {!ready && !failure ? (
         <p className="absolute inset-0 flex items-center justify-center font-[family-name:var(--font-data)] text-xs text-[#9fd4f5]">
