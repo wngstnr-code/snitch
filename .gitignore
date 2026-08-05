@@ -17,6 +17,13 @@ next-env.d.ts
 # vercel
 .vercel
 
+# claude code — pengaturan & sesi per-mesin, jangan dibagikan
+.claude/
+
+# editor
+.vscode/
+.idea/
+
 # misc
 .DS_Store
 *.pem

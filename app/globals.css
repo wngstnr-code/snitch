@@ -2,14 +2,39 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/*
+ * SNITCH — sistem visual.
+ *
+ * Arah: dokumen survei lahan yang dibaca di atas film drafting, dengan satu
+ * jendela instrumen gelap (peta satelit) yang ditembuskan ke dalamnya.
+ *
+ * Warnanya diturunkan dari dunia produk ini, bukan dari selera:
+ *  - `alert` magenta adalah warna yang dipakai Global Forest Watch sendiri
+ *    untuk merender alert deforestasi, dan kebetulan juga warna pita penanda
+ *    yang dipakai surveyor di lapangan.
+ *  - `chain` biru cetak-biru: garis ukur, dan status onchain.
+ *  - `hold` oker: sesuatu yang tertahan, belum diputuskan.
+ *
+ * Ketiganya lolos uji keterbacaan buta warna (protan/deutan/tritan) terhadap
+ * permukaan kartu, dan TIDAK PERNAH dipakai sendirian — setiap status selalu
+ * membawa label teks. Warna di sini penguat, bukan satu-satunya penanda.
+ */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-data);
+  --font-heading: var(--font-display);
+
+  --color-alert: var(--alert);
+  --color-alert-soft: var(--alert-soft);
+  --color-chain: var(--chain);
+  --color-chain-soft: var(--chain-soft);
+  --color-hold: var(--hold);
+  --color-hold-soft: var(--hold-soft);
+  --color-rule: var(--rule);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,82 +74,172 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  /* Film drafting, bukan kertas krem. */
+  --paper: #e9edf0;
+  --background: #e9edf0;
+  --foreground: #0e1519;
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --card: #f7f9fa;
+  --card-foreground: #0e1519;
+  --popover: #f7f9fa;
+  --popover-foreground: #0e1519;
+
+  --primary: #0e1519;
+  --primary-foreground: #f7f9fa;
+  --secondary: #dde4e9;
+  --secondary-foreground: #0e1519;
+
+  --muted: #dde4e9;
+  --muted-foreground: #4a5c6a;
+  --accent: #dde4e9;
+  --accent-foreground: #0e1519;
+
+  --rule: #c7d1d9;
+  --border: #c7d1d9;
+  --input: #c7d1d9;
+  --ring: #0f5f8f;
+
+  /* Tiga status. Terverifikasi lolos ΔE CVD ≥ 8 terhadap permukaan kartu. */
+  --alert: #d81e5b;
+  --alert-soft: #fbe6ed;
+  --chain: #0f5f8f;
+  --chain-soft: #e2edf5;
+  --hold: #9a5b00;
+  --hold-soft: #f7ecdb;
+
+  --destructive: #d81e5b;
+
+  /* Deret magnitudo satu warna untuk histogram alert (terang → gelap). */
+  --chart-1: #f3b9cd;
+  --chart-2: #e97fa5;
+  --chart-3: #de4a7e;
+  --chart-4: #d81e5b;
+  --chart-5: #8f1039;
+
+  --radius: 0.375rem;
+
+  --sidebar: #f7f9fa;
+  --sidebar-foreground: #0e1519;
+  --sidebar-primary: #0e1519;
+  --sidebar-primary-foreground: #f7f9fa;
+  --sidebar-accent: #dde4e9;
+  --sidebar-accent-foreground: #0e1519;
+  --sidebar-border: #c7d1d9;
+  --sidebar-ring: #0f5f8f;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   }
-  html {
-    @apply font-sans;
+
+  /* Judul memakai wajah papan-penanda: rapat, tegas, dipakai hemat. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+
+  /* Angka, hash, UID, koordinat, tanggal — semuanya monospasi. Kalau sebuah
+     nilai bisa dilacak ke sumbernya, ia ditulis dengan wajah data. */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-data), ui-monospace, monospace;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--chain);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Label kecil huruf besar — dipakai untuk menamai bidang dokumen. */
+  .eyebrow {
+    font-family: var(--font-data), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* Nilai yang bisa dilacak ke sumbernya. */
+  .datum {
+    font-family: var(--font-data), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8125rem;
+  }
+
+  /* Lembar dokumen: putih terangkat di atas film, garis rambut, sudut tegas. */
+  .sheet {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  /* Strip provenans — perangkat struktural utama sistem ini.
+     Setiap kartu bukti membawanya: host sumber · waktu ambil · hash mentah.
+     Ia ada karena klaim tanpa asal-usul tidak berarti apa-apa di produk ini. */
+  .provenance {
+    font-family: var(--font-data), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+    border-top: 1px dashed var(--rule);
+    background: color-mix(in srgb, var(--paper) 55%, transparent);
+  }
+}
+
+/* Sitasi agen menunjuk ke `#ev-<id>`. Kartu yang dituju menyala sebentar,
+   supaya klaim dan bukti sumbernya benar-benar terhubung di mata pembaca. */
+[data-evidence]:target {
+  outline: 2px solid var(--chain);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--chain) 12%, transparent);
+}
+
+/* Satu momen gerak: garis hidup attestation menggambar dirinya sekali.
+   Selebihnya diam. */
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: var(--draw-length, 1200);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-live {
+  animation: pulse-live 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }
