@@ -20,6 +20,12 @@ next-env.d.ts
 # claude code — pengaturan & sesi per-mesin, jangan dibagikan
 .claude/
 
+# skill agen yang dipasang per-mesin (npx skills add). Perkakas pribadi,
+# bukan kode proyek. Hapus baris `skills-lock.json` kalau nanti kalian mau
+# semua orang memasang skill yang sama persis.
+.agents/
+skills-lock.json
+
 # editor
 .vscode/
 .idea/
