@@ -1,28 +1,27 @@
 /**
- * Logo. Tanda di sebelah kiri adalah bentuk kecil dari grafik utama produk
- * ini: garis attestation yang berjalan utuh, lalu terputus oleh satu alert.
- * Logonya menceritakan produknya.
+ * Logo.
+ *
+ * Tandanya memakai `currentColor`, bukan hitam mati, supaya ia mengambil warna
+ * tinta dari tempat ia dipasang — header di atas kertas, pita gelap, atau
+ * konteks lain nanti. Berkas asli di `public/logos/snitch.svg` membawa latar
+ * putih penuh; latar itu sengaja tidak dibawa ke sini karena akan tampak
+ * sebagai kotak putih di atas latar kertas sistem ini.
  */
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={`inline-flex items-center gap-2 ${className ?? ''}`}>
       <svg
-        width="26"
-        height="16"
-        viewBox="0 0 26 16"
-        fill="none"
+        width="22"
+        height="22"
+        viewBox="240 232 545 560"
+        fill="currentColor"
         aria-hidden
         className="shrink-0"
       >
-        <path d="M1 8h13" stroke="var(--chain)" strokeWidth="2" strokeLinecap="square" />
-        <path
-          d="M17 8h8"
-          stroke="var(--muted-foreground)"
-          strokeWidth="1.5"
-          strokeDasharray="1.5 2.5"
-          strokeLinecap="butt"
-        />
-        <path d="M15 2v12" stroke="var(--alert)" strokeWidth="2.5" strokeLinecap="butt" />
+        <path d="M514.077 516.534L548.27 516.56C557.661 516.566 566.503 516.296 575.767 517.623C606.734 522.059 631.889 542.216 645.198 570.18C648.136 576.004 650.21 582.384 653.074 588.222C668.285 619.23 698.606 640.137 733.197 642.276C740.588 642.732 748.039 642.518 755.371 642.464L755.361 761.958C730.815 762.721 701.874 762 677.055 762.003L526.471 761.91L526.25 620.459L526.378 573.24C526.373 549.224 527.857 537.699 514.077 516.534Z" />
+        <path d="M455.764 516.7C459.855 516.191 470.3 516.434 474.798 516.439L509.884 516.51C496.739 532.953 498.002 553.109 497.994 572.803L498.002 615.764L497.952 761.919C478.378 762.301 457.631 761.982 437.999 761.982L324.25 761.969L269.257 761.971C270.024 722.799 269.27 681.849 269.329 642.516C276.602 642.561 285.83 642.725 292.951 642.059C326.439 639.181 356.02 619.091 371.042 589.023C378.999 573.381 380.068 564.35 392.397 549.631C408.315 530.683 431.11 518.837 455.764 516.7Z" />
+        <path d="M526.456 262.123L755.272 262.145L755.036 380.15C742.928 380.014 732.181 379.88 720.205 382.301C687.988 388.724 660.993 412.4 649.595 443.078C636.764 477.612 605.132 504.091 567.745 506.209C550.167 507.205 532.147 506.028 514.505 506.573L514.67 505.88C526.856 481.032 526.464 477.894 526.437 450.476L526.396 415.445L526.376 313.107C526.384 296.676 526.01 278.361 526.456 262.123Z" />
+        <path d="M269.452 262.269L497.949 262.087L498.019 407.266L497.961 448.384C497.927 475.679 496.931 481.651 510.402 505.986L510.48 506.499L465.855 506.42C428.278 506.162 397.427 488.221 380.171 454.655C371.963 437.139 366.477 421.855 352.127 407.804C327.289 383.48 302.216 380.045 269.399 380.003C269.132 340.759 269.15 301.513 269.452 262.269Z" />
       </svg>
       <span
         className="font-[family-name:var(--font-display)] text-[1.0625rem] font-extrabold tracking-[-0.01em]"
