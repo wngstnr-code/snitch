@@ -14,7 +14,7 @@ import { EvidencePanel } from '@/components/evidence/panel';
 import { FindingsPanel } from '@/components/findings-panel';
 import { ReviewForm } from '@/components/review-form';
 import { AttestationCard } from '@/components/attestation-card';
-import { StatusBadge } from '@/components/ui/badge';
+import { StatusBadge, VerdictBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingLine, SkeletonRows } from '@/components/ui/states';
 import { statusMeta } from '@/lib/ui/status';
@@ -115,7 +115,42 @@ export function VerificationDetail({ id }: { id: string }) {
               {v.plot.geohash || '—'}
             </p>
           </div>
-          <StatusBadge status={v.status} />
+          {/*
+            Dua keluarga lencana, dan sampai sekarang keduanya berdiri tanpa
+            nama: biru "Issued onchain" adalah posisi di ALUR, merah "FAIL"
+            adalah KESIMPULAN. Keduanya benar bersamaan dan tidak bertentangan,
+            tapi tanpa label pembaca berhenti sejenak untuk menebak hubungannya
+            — tepat di saat yang paling mahal.
+
+            Verdict-nya sendiri sebelumnya baru muncul setelah grafik, peta,
+            dan tabel: pengguna halaman ini datang untuk menjawab "apa
+            kesimpulannya, dan apakah saya setuju", lalu disuruh menggulir
+            melewati tiga bagian untuk menemukannya. Halaman publik untuk orang
+            asing justru sudah melakukannya dengan benar.
+          */}
+          <div className="flex shrink-0 items-start gap-5">
+            {v.assessment ? (
+              <div>
+                <p className="eyebrow">Verdict</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <VerdictBadge verdict={v.assessment.verdict} />
+                  <span className="datum text-muted-foreground">
+                    {v.assessment.findings.length === 0
+                      ? 'no contradictions'
+                      : `${v.assessment.findings.length} contradiction${
+                          v.assessment.findings.length === 1 ? '' : 's'
+                        }`}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+            <div>
+              <p className="eyebrow">Stage</p>
+              <div className="mt-1">
+                <StatusBadge status={v.status} />
+              </div>
+            </div>
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">{meta.hint}</p>
         {meta.running ? (
