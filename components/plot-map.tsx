@@ -78,7 +78,19 @@ export function PlotMap({
   }, [plots]);
 
   const [ready, setReady] = useState(false);
-  const [showAlerts, setShowAlerts] = useState(true);
+  /**
+   * Lapisan raster GFW menyala secara bawaan HANYA bila peta belum punya
+   * bukti terdekode untuk ditampilkan.
+   *
+   * Di halaman intake ia justru intinya: memperlihatkan lanskap deforestasi
+   * sebelum ada verifikasi apa pun. Di halaman berkas ia bersaing dengan titik
+   * alert terdekode dalam warna yang sama, memperlihatkan alert di luar
+   * poligon dan di luar jendela bukti bercampur tanpa bisa dibedakan dari yang
+   * dihitung — dan karena daftar titik dipotong pada 5.000, ada bercak di
+   * dalam poligon yang memang tidak punya titik. Menyalakannya secara bawaan
+   * di sana membuat latar terbaca seperti bukti.
+   */
+  const [showAlerts, setShowAlerts] = useState(alerts.length === 0);
   /** Tile alert yang ditolak GFW — dilaporkan, tidak disembunyikan (§0). */
   const [missingTiles, setMissingTiles] = useState(0);
   const [failure, setFailure] = useState<string | null>(null);
@@ -182,16 +194,24 @@ export function PlotMap({
             paint: { 'line-color': '#9fd4f5', 'line-width': 2.5, 'line-dasharray': [3, 2] },
           });
 
+          // Titik ini adalah alert yang BENAR-BENAR didekode server untuk petak
+          // ini — asal angka di kartu bukti. Lapisan raster GFW di bawahnya
+          // memakai magenta yang sama untuk konteks yang jauh lebih luas, jadi
+          // tanpa pembeda keduanya melebur dan pembaca tidak bisa tahu mana
+          // yang terhitung. Dibedakan lewat BENTUK, bukan warna: inti magenta
+          // dengan cincin putih, sehingga tetap terbaca "alert" tapi jelas
+          // berdiri di atas latar.
           m.addLayer({
             id: 'alert-dots',
             type: 'circle',
             source: 'alerts',
             paint: {
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 1.6, 14, 4],
+              'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 1.8, 14, 4.5],
               'circle-color': '#D81E5B',
-              'circle-opacity': 0.9,
-              'circle-stroke-width': 0.5,
-              'circle-stroke-color': '#3a0417',
+              'circle-opacity': 1,
+              'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 6, 0.8, 14, 1.6],
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-opacity': 0.9,
             },
           });
 
@@ -389,9 +409,20 @@ export function PlotMap({
             onChange={(e) => setShowAlerts(e.target.checked)}
             className="accent-[#F0347A]"
           />
-          GFW alerts
+          {alerts.length > 0 ? 'GFW alerts (all)' : 'GFW alerts'}
         </label>
       </div>
+
+      {showAlerts && alerts.length > 0 ? (
+        <div className="pointer-events-none absolute inset-x-0 top-10 flex justify-center px-2">
+          <p className="pointer-events-auto max-w-md rounded-sm bg-[#0b1116]/90 px-2 py-1 text-[0.6875rem] leading-snug text-[#dbe7ee]">
+            <span className="inline-block size-2 rounded-full bg-[#D81E5B] align-middle ring-1 ring-white" />{' '}
+            ringed dots are the alerts decoded for this plot. The flat magenta
+            wash behind them is every GFW alert in view, including outside the
+            plot and outside the evidence window.
+          </p>
+        </div>
+      ) : null}
 
       {showAlerts && missingTiles > 0 ? (
         <div className="pointer-events-none absolute inset-x-0 top-10 flex justify-center px-2">
