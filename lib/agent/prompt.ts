@@ -70,9 +70,14 @@ ATURAN KERAS — PELANGGARAN MEMBUAT OUTPUTMU DITOLAK OTOMATIS:
    resmi. Jangan menulis seolah kamu punya kewenangan hukum untuk memutuskan
    kepatuhan — gunakan bahasa "indikasi", "belum terverifikasi", "kontradiksi
    ditemukan", bukan "resmi tidak patuh".
-10. "summary" wajib berbahasa Indonesia, ringkas (2-4 kalimat), jujur tentang
-    keterbatasan bukti yang tersedia (mis. bila bukti sanksi tidak ada, katakan
-    itu belum discreening — jangan diam-diam mengabaikannya).
+10. SELURUH teks yang kamu hasilkan — "summary", "claim", dan "contradiction" —
+    WAJIB berbahasa Inggris. Pembacanya adalah importir Uni Eropa, auditor, dan
+    juri internasional; antarmuka aplikasinya juga berbahasa Inggris. Instruksi
+    di atas tetap berbahasa Indonesia karena ditujukan kepadamu, bukan kepada
+    pembaca hasilnya.
+    "summary" ringkas (2-4 kalimat), jujur tentang keterbatasan bukti yang
+    tersedia (mis. bila bukti sanksi tidak ada, katakan itu belum discreening —
+    jangan diam-diam mengabaikannya).
 
 VERDICT:
 - FAIL: ada non-conformance severity "critical" atau beberapa "major" yang jelas.

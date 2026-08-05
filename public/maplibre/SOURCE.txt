@@ -1,0 +1,22 @@
+Salinan worker MapLibre GL JS v6.1.0
+
+Disalin apa adanya dari node_modules/maplibre-gl/dist/ pada 2026-08-05.
+
+KENAPA ADA DI SINI
+MapLibre v6 menebak lokasi worker-nya dari import.meta.url modulnya sendiri:
+
+    let e = import.meta.url;
+    if (!/^https?:/.test(e)) return ``;   // string kosong
+
+Di bawah bundler Next.js/Turbopack nilai itu bukan URL http, jadi hasilnya
+string kosong, worker gagal dibuat, dan SELURUH lapisan GeoJSON diam-diam
+tidak pernah dirender — sementara lapisan raster tetap normal karena tidak
+melewati worker. Tidak ada error yang muncul di mana pun.
+
+components/plot-map.tsx memanggil setWorkerUrl() ke berkas di folder ini.
+Kedua berkas harus tetap berdampingan: worker mengimpor ./maplibre-gl-shared.mjs
+secara relatif.
+
+CARA MEMPERBARUI setelah menaikkan versi maplibre-gl:
+    cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/maplibre/
+    cp node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs public/maplibre/

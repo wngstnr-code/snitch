@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Aset statis, termasuk salinan worker MapLibre — kode pihak ketiga yang
+    // disalin apa adanya, bukan kode kita. Lihat public/maplibre/SOURCE.txt.
+    "public/**",
+    // Skill agen yang dipasang per-mesin (npx skills add). Kode pihak ketiga,
+    // sudah diabaikan git juga.
+    ".agents/**",
   ]),
 ]);
 
