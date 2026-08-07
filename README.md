@@ -33,6 +33,38 @@ evidence bundle from the address recorded *inside* the attestation, re-hashes it
 and compares against the hash anchored onchain. **The answer stays correct even
 if our server is wrong, offline, or lying.**
 
+### Six attestations, and the difference between them is the product
+
+Every row below is live on Base Sepolia right now. Three are still standing;
+three are dead. Nobody moved them by hand — the watcher decides, every 15
+minutes, by re-reading that day's satellite tiles.
+
+| Status | Verdict | Subject | Evidence window | Attestation |
+|---|---|---|---|---|
+| 🟢 ACTIVE | **PASS** | Miracle Harvest concession (Kwantas) · 233.5 ha, plot-level | 2026-08-07 | [`0x37c2a130…36c9f77e`](https://base-sepolia.easscan.org/attestation/view/0x37c2a1300cb15f6d8bc5fbb2d5757a040a31782e574535aaf8eca21736c9f77e) |
+| 🟢 ACTIVE | FAIL | NITAR mill (FGV Palm Industries) · 50 km sourcing radius | 2026-08-05 | [`0xf3c5d6e2…ebb7ffca`](https://base-sepolia.easscan.org/attestation/view/0xf3c5d6e200e73da403bed6e8316c8ce29c8450b9339636a6c1e3f7a1ebb7ffca) |
+| 🟢 ACTIVE | FAIL | SEPAKAU POM (Sarawak Oil Palms) · 50 km sourcing radius | 2026-08-05 | [`0xe670398a…1a56ab8c`](https://base-sepolia.easscan.org/attestation/view/0xe670398a073ddc77854dcfcdbcd25a1ed8d02a0634f4dba6f00824851a56ab8c) |
+| 🔴 REVOKED | FAIL | WA HA mill (FGV Palm Industries) | 2023-01-01 | [`0x3b9429dc…ed2314b2`](https://base-sepolia.easscan.org/attestation/view/0x3b9429dc9d26151f848071b87532b653d9d70b3e1a57a9010cac340aed2314b2) |
+| 🔴 REVOKED | FAIL | WA HA mill | 2026-06-01 | [`0x6ba0f878…6a0dd515`](https://base-sepolia.easscan.org/attestation/view/0x6ba0f8789ed310a325a1bda5a2b9d48a91220f50241100f48542824b6a0dd515) |
+| 🔴 REVOKED | FAIL | WA HA mill | 2026-06-01 | [`0xb044b160…cd5458b6`](https://base-sepolia.easscan.org/attestation/view/0xb044b16086beae6f433083f727644c0db5e29e223c3f74c8a2a482fbcd5458b6) |
+
+Read the pattern, because it is the whole thesis:
+
+- **PASS is earned, never assumed.** Miracle Harvest is a real Malaysian
+  concession from the WRI dataset that we selected *by measuring*: we decoded
+  its tiles and found zero alerts after the EUDR cutoff. Its EU operator, Bunge
+  Loders Croklaan B.V., resolves to an active LEI in the Netherlands and clears
+  both sanctions lists. Every leg of the claim is independently checkable.
+- **FAIL gets published too.** Two mills failed and were signed and published as
+  failures. A verification tool that only ever emits good news is marketing.
+- **The dead ones died on evidence, not on a schedule.** All three carry an
+  evidence window in the past on plots that genuinely kept burning afterwards.
+  The watcher found the newer alerts and called `revoke()`.
+
+The three active attestations survived a real watcher pass on the day of
+writing — `{"checked":3,"revoked":[],"errors":[]}`. They are not safe forever,
+and that is the point: they stay valid exactly as long as the forest does.
+
 ---
 
 ## The problem
@@ -178,6 +210,26 @@ a watcher that attests and revokes in a loop costs nothing here.
 
 ---
 
+## Ecosystem alignment
+
+Each of these is load-bearing. Remove any one and a feature stops working —
+none of them is a logo we pasted on a slide.
+
+| Ecosystem | What it actually carries | Where to verify |
+|---|---|---|
+| **Base** | Every attestation and every revocation. EAS is an OP-Stack predeploy, so `0x42…21` is the same address on Base mainnet and Base Sepolia — moving to mainnet is one environment variable, not a migration. Revocation is the product; it needed a chain where `revocable: true` is native rather than re-implemented. | 6 attestations, 3 revocations, all onchain above |
+| **Ethereum Attestation Service** | The schema itself: verdict, confidence, evidence hash, evidence URI, evidence window, reviewer, LEI. Anchoring the bundle hash onchain is what lets `/v/[uid]` re-verify without trusting our server. | Schema `0x9e8b55ac…1e2c9c25` |
+| **Google Gemini** | The contradiction agent, through the Vercel AI SDK — structured output with zod at `temperature: 0`, cited findings only, invented citations rejected in code. | `lib/agent/` |
+| **Vercel** | App, Functions running the 300-second verification job, and Blob holding every evidence bundle at the URI recorded inside the attestation. | `snitch-lyart.vercel.app` |
+| **Neon** | Postgres behind Drizzle: plots, verifications, evidence, the append-only review log, 50k sanctions entries, and the watch-run history that proves monitoring happened. | `npm run db:check` |
+
+The evidence layer deliberately belongs to nobody: Global Forest Watch, GLEIF,
+OFAC, the EU sanctions list and ArcGIS Hub are all free and registration-free.
+That is not thrift. A trust layer whose evidence can be switched off by one
+vendor is not a trust layer.
+
+---
+
 ## Run it
 
 ```bash
@@ -265,3 +317,15 @@ Oil Mills (ArcGIS Hub) · Esri World Imagery · OpenStreetMap contributors.
 
 MapLibre GL JS worker files in `public/maplibre/` are copied verbatim from the
 `maplibre-gl` package — see `SOURCE.txt` there for why.
+
+---
+
+## Licence
+
+Source code: MIT — see [`LICENSE`](LICENSE).
+
+The MIT grant covers our code only; it does not relicense the data above. GFW
+alerts stay CC BY 4.0 with mandatory attribution, and the ArcGIS concession
+layer is a third-party re-upload of unclear licensing, which is why
+user-uploaded GeoJSON remains the primary path rather than a convenience we
+built the product around.
