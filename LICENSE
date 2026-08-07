@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 Wangsit Nursyahada and Nabil Aufa Danaputra
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+The MIT licence above covers the SNITCH source code only. It does NOT relicense
+the third-party data this project reads. Those carry their own terms, and
+attribution is mandatory — see the Attribution section of README.md:
+
+  - Global Forest Watch integrated deforestation alerts (GLAD-L, GLAD-S2, RADD,
+    DIST-ALERT), © World Resources Institute, licensed CC BY 4.0.
+  - GLEIF Global LEI Index, OFAC Specially Designated Nationals List, and the
+    EU Consolidated Financial Sanctions List, each under their publishers' terms.
+  - Universal Mill List, Unilever Palm Oil Mills, and Oil Palm Concessions
+    (ArcGIS Hub re-uploads) — provenance is stated per feature in the UI, and
+    licensing on the concession layer is unclear, which is why user-uploaded
+    GeoJSON remains the primary path.
+  - Esri World Imagery and OpenStreetMap contributors for basemaps.
+
+MapLibre GL JS worker files vendored in public/maplibre/ are copied verbatim
+from the maplibre-gl package and remain under its own BSD-3-Clause licence; see
+public/maplibre/SOURCE.txt.
