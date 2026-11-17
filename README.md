@@ -1,8 +1,10 @@
 # SNITCH — Living Compliance Attestations
 
+![award](https://img.shields.io/badge/%F0%9F%A5%89_3rd_Place-ChainHack_2026-CD7F32)
+
 > **PDF certificates go stale silently. Ours revoke themselves.**
 
-ChainHack 2026 / NeuralLedger 5.0 · Track: **Industrial 5.0** — with AI × Web3 and Real-World Finance
+🥉 **3rd Place** at **[ChainHack 2026 / NeuralLedger 5.0](https://www.hackquest.io/hackathons/ChainHack)** by CCACC on HackQuest · Track: **Industrial 5.0** — with AI × Web3 and Real-World Finance
 
 An AI agent challenges an exporter's deforestation claims against evidence they
 do not control, a human signs off, and the resulting attestation is written to
